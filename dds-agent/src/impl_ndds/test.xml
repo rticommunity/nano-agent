@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<dds xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://community.rti.com/schema/6.0.0/rti_dds_profiles.xsd" version="6.0.0">
+    <qos_library name="TestLibrary B">
+        <qos_profile name="BestEffort" base_name="BuiltinQosLibExp::Generic.BestEffort" is_default_qos="true">
+            <datareader_qos>
+                <history>
+                    <kind>KEEP_LAST_HISTORY_QOS</kind>
+                    <depth>1</depth>
+                </history>
+            </datareader_qos>
+            <datawriter_qos>
+                <history>
+                    <kind>KEEP_LAST_HISTORY_QOS</kind>
+                    <depth>1</depth>
+                </history>
+            </datawriter_qos>
+        </qos_profile>
+        <qos_profile name="BEReader" base_name="BestEffort">
+        </qos_profile>
+        <qos_profile name="BEWriter" base_name="BestEffort">
+        </qos_profile>
+    </qos_library>
+    <types>
+        <struct name= "ShapeType">
+            <member name="color" stringMaxLength="128" type="string" key="true"/>
+            <member name="x" type="int32"/>
+            <member name="y" type="int32"/>
+            <member name="shapesize" type="int32"/>
+        </struct>
+    </types>
+    <domain_library name="Domain Lib A">
+        <domain name="ShapesDemo" domain_id="46">
+            <register_type name="ShapeType" type_ref="ShapeType" />
+            <topic name="Circle" register_type_ref="ShapeType"/>
+            <topic name="Triangle" register_type_ref="ShapeType"/>
+            <topic name="Square" register_type_ref="ShapeType"/>
+        </domain>
+    </domain_library>
+    <domain_participant_library name="Dp Lib B">
+        <domain_participant name="ParticipantB" domain_ref="Domain Lib A::ShapesDemo">
+            <participant_qos name="qos" base_name="TestLibrary B::BestEffort"/>
+            <publisher name="PublisherB">
+                <data_writer name="WriterCircle" topic_ref="Circle">
+                    <datawriter_qos name="qos" base_name="TestLibrary B::BEWriter"/>
+                </data_writer>
+                <data_writer name="WriterTriangle" topic_ref="Triangle"/>
+                <data_writer name="WriterSquare" topic_ref="Square">
+                    <!-- <datawriter_qos name="qos" base_name="TestLibrary A::Reliable"/> -->
+                </data_writer>
+            </publisher>
+            <subscriber name="SubscriberB">
+                <data_reader name="ReaderCircle" topic_ref="Circle">
+                    <datareader_qos name="qos" base_name="TestLibrary B::BEReader"/>
+                </data_reader>
+                <data_reader name="ReaderTriangle" topic_ref="Triangle"/>
+                <data_reader name="ReaderSquare" topic_ref="Square">
+                    <!-- <datareader_qos name="qos" base_name="TestLibrary A::Reliable"/> -->
+                </data_reader>
+            </subscriber>
+        </domain_participant>
+    </domain_participant_library>
+</dds>

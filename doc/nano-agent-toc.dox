@@ -1,0 +1,10 @@
+/*e
+ * @mainpage RTI nano-agent C API
+ * 
+ * @defgroup nano_agent_api nano-agent API
+ * @addtogroup nano_agent_api
+ * @{ 
+ * 
+ * @defgroup nano_agent_api_service         XRCE Agent Service
+ *
+ * @} *//* nano_agent_api */
