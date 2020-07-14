@@ -84,7 +84,7 @@ typedef struct D2S2_ResourceIdI
 
 #define D2S2_RESOURCEID_INITIALIZER \
 {\
-    D2S2_RESOURCEKIND_UNKNOWN, /* kind */\
+    D2S2_RESOURCEIDKIND_NONE, /* kind */\
     D2S2_RESOURCEIDVALUE_INITIALIZER /* value */\
 }
 

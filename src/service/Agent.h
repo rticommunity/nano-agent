@@ -49,7 +49,7 @@ struct NANO_XRCE_ProxyClientRequestI
     NANO_XRCE_OBJECTID_INVALID, /* object_id */\
     NANO_BOOL_FALSE, /* complete */\
     NANO_BOOL_FALSE, /* reply */\
-    DDS_RETCODE_ERROR, /* rc */\
+    NANO_RETCODE_ERROR, /* rc */\
     NULL, /* reply_mbuf */\
 }
 

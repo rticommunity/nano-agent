@@ -42,7 +42,7 @@ typedef struct NDDSA_StaticResourceIdI
 
 #define NDDSA_STATICRESOURCEID_INITIALIZER \
 {\
-    D2S2_RESOURCEID_INITIALIZER, /* base */\
+    D2S2_RESOURCEIDKIND_NONE, /* base */\
     { 0 } /* ref_buffer */\
 }
 

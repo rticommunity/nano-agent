@@ -295,7 +295,7 @@ NANO_XRCE_AgentInterface_on_session_opened(
     
 done:
 
-    NANO_LOG_FN_EXIT_RC(retcode)
+    NANO_LOG_FN_EXIT
     return retcode;
 }
 
@@ -347,7 +347,7 @@ NANO_XRCE_AgentInterface_on_session_reset(
     
 done:
 
-    NANO_LOG_FN_EXIT_RC(retcode)
+    NANO_LOG_FN_EXIT
     return retcode;
 }
 
@@ -779,7 +779,7 @@ NANO_XRCE_AgentInterface_on_release_read_samples(
     const D2S2_AttachedResourceId reader_id,
     void *const reader_data)
 {
-    NANO_RetCode rc = NANO_RETCODE_ERROR;
+    DDS_ReturnCode_t rc = DDS_RETCODE_ERROR;
     NANO_XRCE_Agent *const self = (NANO_XRCE_Agent*)intf;
     NANO_XRCE_ProxyClient *const client = (NANO_XRCE_ProxyClient*)session_data;
     NANO_XRCE_ReaderState *const reader_state =
@@ -809,9 +809,9 @@ NANO_XRCE_AgentInterface_on_release_read_samples(
     NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
         self, client, stream, reader_id);
 
-    rc = NANO_RETCODE_OK;
+    rc = DDS_RETCODE_OK;
 
-    NANO_LOG_FN_EXIT_RC(rc)
+    NANO_LOG_FN_EXIT
     return rc;
 }
 
