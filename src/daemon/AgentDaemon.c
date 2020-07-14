@@ -84,12 +84,14 @@ done:
 NANO_RetCode
 NANO_AgentDaemon_set_exit_on_signal(int sig)
 {
-    const NANO_RetCode rc = NANO_RETCODE_ERROR;
+    NANO_RetCode rc = NANO_RETCODE_ERROR;
     NANO_AgentDaemon_SigHandlerFn handler = NANO_AgentDaemon_exit_on_signal;
     
     NANO_LOG_FN_ENTRY
     
     signal(sig,handler);
+
+    rc = NANO_RETCODE_OK;
     
     NANO_LOG_FN_EXIT_RC(rc)
     return rc;
@@ -457,6 +459,7 @@ NANO_AgentDaemon_initialize(
     for (i = 0; i < MAX_SIGNALS; i++)
     {
         int sig = signals[i];
+        NANO_LOG_DEBUG("setting exit handler", NANO_LOG_I32("signal", sig))
         NANO_CHECK_RC(
             NANO_AgentDaemon_set_exit_on_signal(sig),
             NANO_LOG_ERROR("FAILED to set signal handler",
