@@ -215,7 +215,7 @@ NANO_AgentDaemon_initialize_xrce(NANO_AgentDaemon *const self)
                 0 /* any */,
                 self->args.xrce_udp_port);
         }
-        transport_udpv4_props.socket.timeout_us = NANO_TIMEOUT_INFINITE;
+        transport_udpv4_props.socket.timeout_ms = NANO_TIMEOUT_INFINITE;
 
         NANO_LOG_INFO("ENABLING udp transport",
                 NANO_LOG_LOCATOR("bind_address",
