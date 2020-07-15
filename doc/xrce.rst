@@ -28,13 +28,14 @@ Applications connect to the XRCE Agent as clients, and they use the
 - Write DDS samples using a DataWriter on the Agent.
 - Read DDS samples received by a DataReader on the Agent.
 
-XRCE's client/server model significantly reduces the minimal memory
-footprint required by an application to use DDS.
+XRCE's client/server model significantly reduces the memory
+footprint and network bandwidth required by an application to use DDS.
 
-Additionally, XRCE is a message-oriented protocol which may be carried out
-over any transport with a Maximum Transport Unit of at least 24 bytes, with
-standard mappings for TCP/UDP sockets, and Serial lines.
+The XRCE protocol may be carried over any transport that has a 
+Maximum Transmission Unit (MTU) of at least 24 bytes. There are
+standard mappings for TCP/UDP sockets, and Serial Transports.
 
-The XRCE standard also defines a custom reliability protocol for reliable
-delivery of messages over unreliable transports, and it supports fragmentation
-(and reconstruction) of large payloads which exceed the transport's MTU.
+The XRCE standard also defines a reliability protocol for reliable
+delivery of messages over unreliable transports. XRCE also supports 
+fragmentation (and reconstruction) of large data payloads, allowing 
+XRCE to send data larger than the transport's MTU.
