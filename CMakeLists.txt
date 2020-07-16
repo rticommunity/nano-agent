@@ -51,6 +51,12 @@ nano_project_option(
     ${${PROJECT_NAME}_ENABLE_CLIENT}
     "Include nano-client C++ API in build")
 
+nano_project_option(
+    ENABLE_CLIENT_ARDUINO
+    "Build XRCE Client API (Arduino-compatible API)"
+    ${${PROJECT_NAME}_ENABLE_CLIENT_CPP}
+    "Include nano-client Arduino-compatible API in build")
+
 ################################################################################
 
 nano_project_load_connextdds()
@@ -174,12 +180,21 @@ function(build_nanoclient_cpp)
     add_subdirectory(nano-client/extras/nano-client-cpp     client-cpp)
 endfunction()
 
+function(build_nanoclient_arduino)
+    set(ENABLE_XRCE_AGENT   false)
+    add_subdirectory(nano-client/extras/nano-client-arduino client-arduino)
+endfunction()
+
 if(${PROJECT_NAME}_ENABLE_CLIENT_C)
     build_nanoclient_c()
 endif()
 
 if(${PROJECT_NAME}_ENABLE_CLIENT_CPP)
     build_nanoclient_cpp()
+endif()
+
+if(${PROJECT_NAME}_ENABLE_CLIENT_ARDUINO)
+    build_nanoclient_arduino()
 endif()
 
 ################################################################################

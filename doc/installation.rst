@@ -27,7 +27,7 @@ Clone |RTI| |NANO_AGENT|'s
 
 
 When building |RTI| |NANO_AGENT| with CMake, you can take advantage of the generated
-``install`` target to copy all generated build artifacts to your desired location.
+``install`` target to copy all build artifacts to your desired location.
 
 
 .. _section-install-client:
@@ -59,15 +59,15 @@ and ``BUILD_EXECUTABLES`` options to skip compilation of the source code.
 
     mkdir build && cd build
 
-    cmake /path/to/nano-client BUILD_DOCS=ON \
-                               BUILD_LIBRARIES=OFF \
-                               BUILD_EXECUTABLES=OFF
+    cmake /path/to/nano-client -DBUILD_DOCS=ON \
+                               -DBUILD_LIBRARIES=OFF \
+                               -DBUILD_EXECUTABLES=OFF
     
     cmake --build . --target install
 
-    # Agent Manual:   ./install/doc/nano-agent/html
-    # Client Manual:  ./install/doc/nano-client/html
-    # Client API Ref: ./install/doc/nano-client/html/api
+    # Agent Manual:   ./install/doc/manual/nano-agent/html
+    # Client Manual:  ./install/doc/manual/nano-client/html
+    # Client API Ref: ./install/doc/api/nano-client/html/
 
 The generation of |RTI| |NANO_CLIENT|'s documentation can be disabled disabling
 option ``BUILD_DOCS_CLIENT``.
