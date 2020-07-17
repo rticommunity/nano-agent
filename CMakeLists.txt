@@ -153,23 +153,6 @@ nano_component_executable(NANO_AGENT nanoagentd)
 
 ################################################################################
 
-
-if (${PROJECT_NAME}_BUILD_DOCS)
-
-    set(DOC_SOURCES     index.rst
-                        installation.rst
-                        building.rst
-                        xrce.rst
-                        vars.rst
-                        svc_manual.rst
-                        quickstart.rst)
-    
-    nano_project_docs()
-
-endif()
-
-################################################################################
-
 function(build_nanoclient_c)
     set(ENABLE_XRCE_AGENT   false)
     add_subdirectory(nano-client                            client-c)
@@ -195,6 +178,43 @@ endif()
 
 if(${PROJECT_NAME}_ENABLE_CLIENT_ARDUINO)
     build_nanoclient_arduino()
+endif()
+
+################################################################################
+
+function(build_nanoclient_docs)
+    set(BUILD_LIBRARIES   false)
+    set(BUILD_EXECUTABLES   false)
+    set(BUILD_DOCS true)
+    if (NOT TARGET nano-client-docs)
+        build_nanoclient_c()
+    endif()
+    if (NOT TARGET nano-client-cpp-docs)
+        build_nanoclient_cpp()
+    endif()
+    if (NOT TARGET nano-client-arduino-docs)
+        build_nanoclient_arduino()
+    endif()
+endfunction()
+
+if (${PROJECT_NAME}_BUILD_DOCS)
+
+    build_nanoclient_docs()
+
+    set(DOC_SOURCES     index.rst
+                        installation.rst
+                        building.rst
+                        xrce.rst
+                        vars.rst
+                        svc_manual.rst
+                        quickstart.rst)
+    
+    set(DOC_DEPS        nano-client)
+
+    # set(DOC_ROOT_INDEX  index.html)
+
+    nano_project_docs()
+
 endif()
 
 ################################################################################

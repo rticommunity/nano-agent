@@ -65,7 +65,7 @@ the Software.
 
 [omg-xrce]: https://www.omg.org/spec/DDS-XRCE/About-DDS-XRCE/ "OMG DDS-XRCE Specification"
 [nano-client-git]: https://github.com/rticommunity/nano-client.git "RTI nano-client Git repository"
-[nano-agent-docs]: https://community.rti.com/static/documentation/nano/nano-agent/latest "RTI nano-agent User Manual"
+[nano-agent-docs]: https://community.rti.com/static/documentation/nano/nano-agent/latest/manual/nano-agent/html/ "RTI nano-agent User Manual"
 [connext-home]: https://www.rti.com/products/connext-dds-professional "RTI Connext DDS Professional Homepage"
 [experimental-faq]: https://www.rti.com/developers/rti-labs/experimental-product-faq "RTI Experimental Product FAQ"
 [dds-xrce-architecture]: doc/static/dds_xrce_architecture.png "DDS-XRCE System Architecture"
