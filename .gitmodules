@@ -1,3 +1,6 @@
 [submodule "nano-client"]
 	path = nano-client
 	url = https://github.com/rticommunity/nano-client
+[submodule "third-party/civetweb"]
+	path = third-party/civetweb
+	url = https://github.com/civetweb/civetweb.git
