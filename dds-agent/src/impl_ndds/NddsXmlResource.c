@@ -18,6 +18,7 @@
 
 #include "NddsXmlResource.h"
 #include "NddsRefResource.h"
+#include "ServiceXml.h"
 
 #if DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT
 
@@ -1787,6 +1788,18 @@ NDDSA_ResourceFactory_unload_resource_xml(
         resource_ref = resource_ref_own;
         break;
     }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        /* Must delete <service */
+        resource_ref = resource_id->value.ref;
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        /* Must delete <resource */
+        resource_ref = resource_id->value.ref;
+        break;
+    }
     default:
         goto done;
     }
@@ -1828,6 +1841,122 @@ done:
     }
     D2S2Log_fn_exit()
     return;
+}
+
+RTIBool
+NDDSA_ResourceFactory_create_service_xml(
+    NDDSA_ResourceFactory *const self,
+    const char *const svc_server_xml,
+    const D2S2_ResourceProperties *const properties,
+    struct NDDSA_CreatedResourceLogSeq *const svc_out,
+    struct NDDSA_CreatedResourceLogSeq *const svc_resources_out)
+{
+    D2S2Log_METHOD_NAME(NDDSA_ResourceFactory_create_service_xml)
+    RTIBool retcode = RTI_FALSE;
+    DDS_ReturnCode_t rc = DDS_RETCODE_ERROR;
+    DDS_DomainParticipantFactory *factory = NULL;
+    const char *server_full_name = NULL,
+               *el_full_name = NULL;
+    NDDSA_CreatedResourceLog * server_id = NULL;
+    DDS_UnsignedLong seq_len = 0,
+                     seq_max = 0,
+                     el_i = 0;
+    NDDSA_CreatedResourceLog *el_id = NULL;
+    struct DDS_XMLObject * xml_svc = NULL,
+                         * xml_root = NULL;
+    NDDSA_ServiceXml * root = NULL;
+    NDDSA_ServiceResourceXml * child = NULL;
+
+    D2S2Log_fn_entry()
+
+    factory = DDS_DomainParticipantFactory_get_instance();
+    if (factory == NULL)
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    rc = DDS_DomainParticipantFactory_load_xml_element(
+        factory, &server_full_name, "", svc_server_xml);
+    if (DDS_RETCODE_OK != rc)
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    DDS_DomainParticipantFactory_lockI(factory);
+
+    xml_root = DDS_DomainParticipantFactory_get_xml_rootI(factory);
+    if (xml_root == NULL)
+    {
+        DDS_DomainParticipantFactory_unlockI(factory);
+        goto done;
+    }
+
+    xml_svc = DDS_XMLObject_lookup(xml_root, server_full_name);
+    if (NULL == xml_svc)
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    if (strcmp(NDDSA_SERVICE_XML_TAG, DDS_XMLObject_get_tag_name(xml_svc)) != 0)
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    root = (NDDSA_ServiceXml*)xml_svc;
+
+    child = (NDDSA_ServiceResourceXml*)
+        DDS_XMLObject_get_first_child_with_tag(&root->base, NDDSA_SERVICE_RESOURCE_XML_TAG);
+    el_i = NDDSA_CreatedResourceLogSeq_get_length(svc_resources_out);
+    while (NULL != child)
+    {
+        if (!NDDSA_CreatedResourceLogSeq_ensure_length(
+                svc_resources_out, el_i + 1, el_i + 1))
+        {
+            /* TODO log */
+            goto done;
+        }
+
+        el_id = NDDSA_CreatedResourceLogSeq_get_reference(svc_resources_out, el_i);
+        el_id->kind = D2S2_RESOURCEKIND_SERVICE_RESOURCE;
+        el_id->data = child;
+        el_full_name = DDS_XMLObject_get_fully_qualified_name(&child->base);
+        if (!D2S2_ResourceId_initialize_ref(&el_id->id, el_full_name))
+        {
+            /* TODO log */
+            goto done;
+        }
+
+        el_i += 1;
+        child = (NDDSA_ServiceResourceXml*) DDS_XMLObject_get_next_sibling(&child->base);
+    }
+
+    seq_len = NDDSA_CreatedResourceLogSeq_get_length(svc_out);
+    seq_max = NDDSA_CreatedResourceLogSeq_get_maximum(svc_out);
+    seq_max = (seq_max < seq_len + 1)? seq_len + 1 : seq_max;
+    if (!NDDSA_CreatedResourceLogSeq_ensure_length(svc_out, seq_len + 1, seq_max))
+    {
+        /* TODO log */
+        goto done;
+    }
+    server_id = 
+      NDDSA_CreatedResourceLogSeq_get_reference(svc_out, seq_len + 1);
+    server_id->kind = D2S2_RESOURCEKIND_SERVICE;
+    server_id->data = root;
+    if (!D2S2_ResourceId_initialize_ref(&server_id->id, server_full_name))
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    retcode = RTI_TRUE;
+    
+done:
+    D2S2Log_fn_exit()
+    return retcode;
 }
 
 #endif /* DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT */

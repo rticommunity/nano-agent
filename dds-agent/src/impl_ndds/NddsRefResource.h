@@ -76,6 +76,16 @@ NDDSA_RefResource_lookup_type(
     const D2S2_ResourceId *const id,
     RTIBool *const exists_out);
 
+RTIBool
+NDDSA_RefResource_lookup_service(
+    const D2S2_ResourceId *const id,
+    void **const resource_data_out);
+
+RTIBool
+NDDSA_RefResource_lookup_service_resource(
+    const D2S2_ResourceId *const id,
+    void **const resource_data_out);
+
 #endif /* DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT */
 
 #endif /* NddsRefResource_h */

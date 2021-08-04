@@ -18,6 +18,7 @@
 
 #include "NddsResourceFactory.h"
 #include "ApplicationLibraryXml.h"
+#include "ServiceXml.h"
 #include "NddsAgentDtd.h"
 
 #include "NddsXmlResource.h"
@@ -124,6 +125,16 @@ NDDSA_ResourceFactory_initialize_xml_parser(
     {
         goto done;
     }
+    // printf("---- AGENT DTD ----\n");
+    // {
+    //     size_t i = 0;
+    //     for (i = 0; i < NDDSA_AGENT_DTD_SIZE; i++)
+    //     {
+    //       printf("%s", NDDSA_AGENT_DTD[i]);
+    //     }
+        
+    // }
+    // printf("---- //AGENT DTD ----\n");
     DDS_StringSeq_from_array(
             &factory_qos.profile.string_profile_dtd,
             NDDSA_AGENT_DTD,
@@ -149,6 +160,11 @@ NDDSA_ResourceFactory_initialize_xml_parser(
     }
 
     if (!NDDSA_ApplicationLibraryXml_register_extension(self->xml_parser))
+    {
+        goto done;
+    }
+
+    if (!NDDSA_ServiceXml_register_extension(self->xml_parser))
     {
         goto done;
     }
@@ -390,6 +406,17 @@ NDDSA_ResourceFactory_create_resource_native_xml(
                     self, xml_repr, properties, created_out);
         break;
     }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        if (parent != NULL)
+        {
+            /* we don't expect a parent for this type of entity */
+            goto done;
+        }
+        retcode = NDDSA_ResourceFactory_create_service_xml(
+            self, xml_repr, properties, created_out, &inner_entities);
+        break;
+    }
     default:
     {
         goto done;
@@ -453,6 +480,7 @@ NDDSA_ResourceFactory_create_resource_native_ref(
     D2S2_ResourceId resource_id = D2S2_RESOURCEID_INITIALIZER;
     struct NDDSA_CreatedResourceLogSeq inner_entities = DDS_SEQUENCE_INITIALIZER;
     char *full_ref = NULL;
+    void *resource_data =  NULL;
 
     D2S2Log_fn_entry()
 
@@ -576,6 +604,24 @@ NDDSA_ResourceFactory_create_resource_native_ref(
         }
         break;
     }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        if (!NDDSA_RefResource_lookup_service(&resource_id, &resource_data))
+        {
+            goto done;
+        }
+        resource_exists = (resource_data != NULL);
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        if (!NDDSA_RefResource_lookup_service_resource(&resource_id, &resource_data))
+        {
+            goto done;
+        }
+        resource_exists = (resource_data != NULL);
+        break;
+    }
     default:
     {
         goto done;
@@ -595,6 +641,7 @@ NDDSA_ResourceFactory_create_resource_native_ref(
             goto done;
         }
         created_id->kind = kind;
+        created_id->data = resource_data;
         if (!D2S2_ResourceId_initialize_ref(
                 &created_id->id, resource_id.value.ref))
         {
@@ -698,240 +745,240 @@ done:
     return retcode;
 }
 
-RTIBool
-NDDSA_ResourceFactory_delete_entity_resource(
-    NDDSA_ResourceFactory *const self,
-    const D2S2_ResourceKind kind,
-    const D2S2_ResourceId *const id)
-{
-    RTIBool retcode = RTI_FALSE,
-            exists = RTI_FALSE,
-            parent_exists = RTI_FALSE,
-            initd_resource_name = RTI_FALSE;
-    NDDSA_EntityResource entity_res = NDDSA_ENTITYRESOURCE_INITIALIZER,
-                         parent_res = NDDSA_ENTITYRESOURCE_INITIALIZER;
-    DDS_DomainParticipantFactory *factory = NULL;
-    D2S2_EntityName resource_name = D2S2_ENTITYNAME_INITIALIZER;
-    char *participant_name = NULL,
-         *publisher_name = NULL,
-         *subscriber_name = NULL;
-    D2S2_ResourceId parent_id = D2S2_RESOURCEID_INITIALIZER;
-    D2S2_ResourceKind parent_kind = D2S2_RESOURCEKIND_UNKNOWN;
+// RTIBool
+// NDDSA_ResourceFactory_delete_entity_resource(
+//     NDDSA_ResourceFactory *const self,
+//     const D2S2_ResourceKind kind,
+//     const D2S2_ResourceId *const id)
+// {
+//     RTIBool retcode = RTI_FALSE,
+//             exists = RTI_FALSE,
+//             parent_exists = RTI_FALSE,
+//             initd_resource_name = RTI_FALSE;
+//     NDDSA_EntityResource entity_res = NDDSA_ENTITYRESOURCE_INITIALIZER,
+//                          parent_res = NDDSA_ENTITYRESOURCE_INITIALIZER;
+//     DDS_DomainParticipantFactory *factory = NULL;
+//     D2S2_EntityName resource_name = D2S2_ENTITYNAME_INITIALIZER;
+//     char *participant_name = NULL,
+//          *publisher_name = NULL,
+//          *subscriber_name = NULL;
+//     D2S2_ResourceId parent_id = D2S2_RESOURCEID_INITIALIZER;
+//     D2S2_ResourceKind parent_kind = D2S2_RESOURCEKIND_UNKNOWN;
 
-    NDDSA_ResourceFactory_enter_ea(self);
+//     NDDSA_ResourceFactory_enter_ea(self);
 
-    if (!D2S2_EntityName_from_id(&resource_name, id))
-    {
-        goto done;
-    }
-    initd_resource_name = RTI_TRUE;
+//     if (!D2S2_EntityName_from_id(&resource_name, id))
+//     {
+//         goto done;
+//     }
+//     initd_resource_name = RTI_TRUE;
 
-    factory = DDS_DomainParticipantFactory_get_instance();
-    if (factory == NULL)
-    {
-        goto done;
-    }
+//     factory = DDS_DomainParticipantFactory_get_instance();
+//     if (factory == NULL)
+//     {
+//         goto done;
+//     }
 
-    if (!NDDSA_ResourceFactory_lookup_entity_resourceEA(
-            self,
-            kind,
-            id,
-            &exists,
-            &entity_res))
-    {
-        goto done;
-    }
+//     if (!NDDSA_ResourceFactory_lookup_entity_resourceEA(
+//             self,
+//             kind,
+//             id,
+//             &exists,
+//             &entity_res))
+//     {
+//         goto done;
+//     }
 
-    if (!exists)
-    {
-        /* Resource doesn't exists, so there's nothing left to do.
-           It might have been already deleted by some other means. */
-        retcode = RTI_TRUE;
-        goto done;
-    }
+//     if (!exists)
+//     {
+//         /* Resource doesn't exists, so there's nothing left to do.
+//            It might have been already deleted by some other means. */
+//         retcode = RTI_TRUE;
+//         goto done;
+//     }
 
-    switch (kind)
-    {
-    case D2S2_RESOURCEKIND_DOMAINPARTICIPANT:
-    {
-        /* no parent */
-        break;
-    }
-    case D2S2_RESOURCEKIND_TOPIC:
-    case D2S2_RESOURCEKIND_PUBLISHER:
-    case D2S2_RESOURCEKIND_SUBSCRIBER:
-    {
-        parent_kind = D2S2_RESOURCEKIND_DOMAINPARTICIPANT;
-        if (!D2S2_EntityName_to_ref(
-                &resource_name,
-                D2S2_ENTITYNAME_DEPTH_PARTICIPANT,
-                &participant_name))
-        {
-            goto done;
-        }
-        parent_id.kind = D2S2_RESOURCEIDKIND_REF;
-        parent_id.value.ref = participant_name;
-        break;
-    }
-    case D2S2_RESOURCEKIND_DATAWRITER:
-    {
-        parent_kind = D2S2_RESOURCEKIND_PUBLISHER;
-        if (!D2S2_EntityName_to_ref(
-                &resource_name,
-                D2S2_ENTITYNAME_DEPTH_PUBLISHER,
-                &publisher_name))
-        {
-            goto done;
-        }
-        parent_id.kind = D2S2_RESOURCEIDKIND_REF;
-        parent_id.value.ref = (char*) publisher_name;
-        break;
-    }
-    case D2S2_RESOURCEKIND_DATAREADER:
-    {
-        parent_kind = D2S2_RESOURCEKIND_SUBSCRIBER;
-        if (!D2S2_EntityName_to_ref(
-                &resource_name,
-                D2S2_ENTITYNAME_DEPTH_SUBSCRIBER,
-                &subscriber_name))
-        {
-            goto done;
-        }
-        parent_id.kind = D2S2_RESOURCEIDKIND_REF;
-        parent_id.value.ref = (char*) subscriber_name;
-        break;
-    }
-    default:
-    {
-        /* invalid resource kind */
-        goto done;
-    }
-    }
+//     switch (kind)
+//     {
+//     case D2S2_RESOURCEKIND_DOMAINPARTICIPANT:
+//     {
+//         /* no parent */
+//         break;
+//     }
+//     case D2S2_RESOURCEKIND_TOPIC:
+//     case D2S2_RESOURCEKIND_PUBLISHER:
+//     case D2S2_RESOURCEKIND_SUBSCRIBER:
+//     {
+//         parent_kind = D2S2_RESOURCEKIND_DOMAINPARTICIPANT;
+//         if (!D2S2_EntityName_to_ref(
+//                 &resource_name,
+//                 D2S2_ENTITYNAME_DEPTH_PARTICIPANT,
+//                 &participant_name))
+//         {
+//             goto done;
+//         }
+//         parent_id.kind = D2S2_RESOURCEIDKIND_REF;
+//         parent_id.value.ref = participant_name;
+//         break;
+//     }
+//     case D2S2_RESOURCEKIND_DATAWRITER:
+//     {
+//         parent_kind = D2S2_RESOURCEKIND_PUBLISHER;
+//         if (!D2S2_EntityName_to_ref(
+//                 &resource_name,
+//                 D2S2_ENTITYNAME_DEPTH_PUBLISHER,
+//                 &publisher_name))
+//         {
+//             goto done;
+//         }
+//         parent_id.kind = D2S2_RESOURCEIDKIND_REF;
+//         parent_id.value.ref = (char*) publisher_name;
+//         break;
+//     }
+//     case D2S2_RESOURCEKIND_DATAREADER:
+//     {
+//         parent_kind = D2S2_RESOURCEKIND_SUBSCRIBER;
+//         if (!D2S2_EntityName_to_ref(
+//                 &resource_name,
+//                 D2S2_ENTITYNAME_DEPTH_SUBSCRIBER,
+//                 &subscriber_name))
+//         {
+//             goto done;
+//         }
+//         parent_id.kind = D2S2_RESOURCEIDKIND_REF;
+//         parent_id.value.ref = (char*) subscriber_name;
+//         break;
+//     }
+//     default:
+//     {
+//         /* invalid resource kind */
+//         goto done;
+//     }
+//     }
 
-    if (parent_kind != D2S2_RESOURCEKIND_UNKNOWN)
-    {
-        if (!NDDSA_ResourceFactory_lookup_entity_resourceEA(
-                self, parent_kind, &parent_id, &parent_exists, &parent_res))
-        {
-            goto done;
-        }
-        if (!parent_exists)
-        {
-            /* This should NOT happen */
-            goto done;
-        }
-    }
+//     if (parent_kind != D2S2_RESOURCEKIND_UNKNOWN)
+//     {
+//         if (!NDDSA_ResourceFactory_lookup_entity_resourceEA(
+//                 self, parent_kind, &parent_id, &parent_exists, &parent_res))
+//         {
+//             goto done;
+//         }
+//         if (!parent_exists)
+//         {
+//             /* This should NOT happen */
+//             goto done;
+//         }
+//     }
 
-    switch (kind)
-    {
-    case D2S2_RESOURCEKIND_DOMAINPARTICIPANT:
-    {
-        if (DDS_RETCODE_OK !=
-                DDS_DomainParticipant_delete_contained_entities(
-                    entity_res.participant))
-        {
-            goto done;
-        }
+//     switch (kind)
+//     {
+//     case D2S2_RESOURCEKIND_DOMAINPARTICIPANT:
+//     {
+//         if (DDS_RETCODE_OK !=
+//                 DDS_DomainParticipant_delete_contained_entities(
+//                     entity_res.participant))
+//         {
+//             goto done;
+//         }
         
-        if (DDS_RETCODE_OK !=
-                DDS_DomainParticipantFactory_delete_participant(
-                    factory, entity_res.participant))
-        {
-            goto done;
-        }
-        break;
-    }
-    case D2S2_RESOURCEKIND_TOPIC:
-    {
-        if (DDS_RETCODE_OK !=
-                DDS_DomainParticipant_delete_topic(
-                    parent_res.participant, entity_res.topic))
-        {
-            goto done;
-        }
-        break;
-    }
-    case D2S2_RESOURCEKIND_PUBLISHER:
-    {
-        if (DDS_RETCODE_OK !=
-                DDS_Publisher_delete_contained_entities(entity_res.publisher))
-        {
-            goto done;
-        }
+//         if (DDS_RETCODE_OK !=
+//                 DDS_DomainParticipantFactory_delete_participant(
+//                     factory, entity_res.participant))
+//         {
+//             goto done;
+//         }
+//         break;
+//     }
+//     case D2S2_RESOURCEKIND_TOPIC:
+//     {
+//         if (DDS_RETCODE_OK !=
+//                 DDS_DomainParticipant_delete_topic(
+//                     parent_res.participant, entity_res.topic))
+//         {
+//             goto done;
+//         }
+//         break;
+//     }
+//     case D2S2_RESOURCEKIND_PUBLISHER:
+//     {
+//         if (DDS_RETCODE_OK !=
+//                 DDS_Publisher_delete_contained_entities(entity_res.publisher))
+//         {
+//             goto done;
+//         }
 
-        if (DDS_RETCODE_OK !=
-                DDS_DomainParticipant_delete_publisher(
-                    parent_res.participant, entity_res.publisher))
-        {
-            goto done;
-        }
-        break;
-    }
-    case D2S2_RESOURCEKIND_SUBSCRIBER:
-    {
-        if (DDS_RETCODE_OK !=
-                DDS_Subscriber_delete_contained_entities(
-                    entity_res.subscriber))
-        {
-            goto done;
-        }
+//         if (DDS_RETCODE_OK !=
+//                 DDS_DomainParticipant_delete_publisher(
+//                     parent_res.participant, entity_res.publisher))
+//         {
+//             goto done;
+//         }
+//         break;
+//     }
+//     case D2S2_RESOURCEKIND_SUBSCRIBER:
+//     {
+//         if (DDS_RETCODE_OK !=
+//                 DDS_Subscriber_delete_contained_entities(
+//                     entity_res.subscriber))
+//         {
+//             goto done;
+//         }
 
-        if (DDS_RETCODE_OK !=
-                DDS_DomainParticipant_delete_subscriber(
-                    parent_res.participant, entity_res.subscriber))
-        {
-            goto done;
-        }
-        break;
-    }
-    case D2S2_RESOURCEKIND_DATAWRITER:
-    {
-        if (DDS_RETCODE_OK !=
-                DDS_Publisher_delete_datawriter(
-                    parent_res.publisher, entity_res.writer))
-        {
-            goto done;
-        }
-        break;
-    }
-    case D2S2_RESOURCEKIND_DATAREADER:
-    {
-        if (DDS_RETCODE_OK !=
-                DDS_Subscriber_delete_datareader(
-                    parent_res.subscriber, entity_res.reader))
-        {
-            goto done;
-        }
-        break;
-    }
-    default:
-    {
-        /* Should never get here */
-        goto done;
-    }
-    }
+//         if (DDS_RETCODE_OK !=
+//                 DDS_DomainParticipant_delete_subscriber(
+//                     parent_res.participant, entity_res.subscriber))
+//         {
+//             goto done;
+//         }
+//         break;
+//     }
+//     case D2S2_RESOURCEKIND_DATAWRITER:
+//     {
+//         if (DDS_RETCODE_OK !=
+//                 DDS_Publisher_delete_datawriter(
+//                     parent_res.publisher, entity_res.writer))
+//         {
+//             goto done;
+//         }
+//         break;
+//     }
+//     case D2S2_RESOURCEKIND_DATAREADER:
+//     {
+//         if (DDS_RETCODE_OK !=
+//                 DDS_Subscriber_delete_datareader(
+//                     parent_res.subscriber, entity_res.reader))
+//         {
+//             goto done;
+//         }
+//         break;
+//     }
+//     default:
+//     {
+//         /* Should never get here */
+//         goto done;
+//     }
+//     }
 
-    retcode = RTI_TRUE;
-done:
-    if (initd_resource_name)
-    {
-        D2S2_EntityName_finalize(&resource_name);
-    }
-    if (participant_name != NULL)
-    {
-        RTIOsapiHeap_freeString(participant_name);
-    }
-    if (publisher_name != NULL)
-    {
-        RTIOsapiHeap_freeString(publisher_name);
-    }
-    if (subscriber_name != NULL)
-    {
-        RTIOsapiHeap_freeString(subscriber_name);
-    }
-    NDDSA_ResourceFactory_leave_ea(self);
-    return retcode;
-}
+//     retcode = RTI_TRUE;
+// done:
+//     if (initd_resource_name)
+//     {
+//         D2S2_EntityName_finalize(&resource_name);
+//     }
+//     if (participant_name != NULL)
+//     {
+//         RTIOsapiHeap_freeString(participant_name);
+//     }
+//     if (publisher_name != NULL)
+//     {
+//         RTIOsapiHeap_freeString(publisher_name);
+//     }
+//     if (subscriber_name != NULL)
+//     {
+//         RTIOsapiHeap_freeString(subscriber_name);
+//     }
+//     NDDSA_ResourceFactory_leave_ea(self);
+//     return retcode;
+// }
 
 RTI_PRIVATE
 RTIBool
@@ -1038,6 +1085,28 @@ NDDSA_ResourceFactory_lookup_entity_resourceEA(
         }
         break;
     }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        void *resource_data = NULL;
+        if (!NDDSA_RefResource_lookup_service(id, &resource_data))
+        {
+            goto done;
+        }
+        entity_out->service = (NDDSA_ExternalService*)resource_data;
+        *exists_out = NULL != entity_out->service;
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        void *resource_data = NULL;
+        if (!NDDSA_RefResource_lookup_service_resource(id, &resource_data))
+        {
+            goto done;
+        }
+        entity_out->service_resource = (NDDSA_ExternalServiceResource*)resource_data;
+        *exists_out = NULL != entity_out->service_resource;
+        break;
+    }
     default:
     {
         goto done;
@@ -1081,7 +1150,8 @@ RTIBool
 NDDSA_XmlResourceVisitor_append_created_resource(
     NDDSA_XmlResourceVisitor *const self,
     const char *const ref,
-    const D2S2_ResourceKind ref_kind)
+    const D2S2_ResourceKind ref_kind,
+    void * const ref_data)
 {
     RTIBool retcode = RTI_FALSE;
     NDDSA_CreatedResourceLog *id_ref = NULL;
@@ -1106,6 +1176,7 @@ NDDSA_XmlResourceVisitor_append_created_resource(
     {
         goto done;
     }
+    id_ref->data = ref_data;
 
     
     retcode = RTI_TRUE;
@@ -1178,6 +1249,20 @@ NDDSA_XmlResourceVisitor_on_topic(
     struct DDS_XMLObject *xml_obj);
 
 RTI_PRIVATE
+RTIBool
+NDDSA_XmlResourceVisitor_on_service(
+    void *const visitor,
+    NDDSA_Agent *const agent,
+    struct DDS_XMLObject *xml_obj);
+
+RTI_PRIVATE
+RTIBool
+NDDSA_XmlResourceVisitor_on_service_resource(
+    void *const visitor,
+    NDDSA_Agent *const agent,
+    struct DDS_XMLObject *xml_obj);
+
+RTI_PRIVATE
 const char *
 NDDSA_XmlResourceVisitor_get_resource_id(
     struct DDS_XMLObject *xml_obj)
@@ -1233,7 +1318,8 @@ NDDSA_XmlResourceVisitor_on_resource(
         D2S2_RESOURCEREPRESENTATION_INITIALIZER;
     D2S2_EntityName res_name = D2S2_ENTITYNAME_INITIALIZER;
     DDS_DomainParticipant *dp = NULL;
-    
+    void * res_data = NULL;
+
     D2S2Log_fn_entry()
 
     el_fqn = NDDSA_XmlResourceVisitor_get_resource_id(xml_obj);
@@ -1334,6 +1420,24 @@ NDDSA_XmlResourceVisitor_on_resource(
             }
             break;
         }
+        case D2S2_RESOURCEKIND_SERVICE:
+        {
+            resource_repr.value.ref = (char*) el_fqn;
+            res_data = xml_obj;
+            break;
+        }
+        case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+        {
+            resource_repr.value.ref = D2S2_EntityName_leaf(&res_name);
+            if (!D2S2_EntityName_to_ref(
+                    &res_name,
+                    D2S2_ENTITYNAME_DEPTH_SERVICE,
+                    &parent_id.value.ref))
+            {
+                goto done;
+            }
+            break;
+        }
         default:
             goto done;
         }
@@ -1343,7 +1447,8 @@ NDDSA_XmlResourceVisitor_on_resource(
                     agent,
                     res_kind,
                     &resource_repr,
-                    ((res_kind != D2S2_RESOURCEKIND_DOMAINPARTICIPANT)?
+                    ((res_kind != D2S2_RESOURCEKIND_DOMAINPARTICIPANT &&
+                      res_kind != D2S2_RESOURCEKIND_SERVICE)?
                         &parent_id : NULL),
                     &self->res_properties,
                     &resource_rec))
@@ -1357,7 +1462,7 @@ NDDSA_XmlResourceVisitor_on_resource(
     }
 
     if (!NDDSA_XmlResourceVisitor_append_created_resource(
-            self, id.value.ref, res_kind))
+            self, id.value.ref, res_kind, res_data))
     {
         goto done;
     }
@@ -1498,6 +1603,44 @@ NDDSA_XmlResourceVisitor_on_topic(
     return retcode;
 }
 
+RTI_PRIVATE
+RTIBool
+NDDSA_XmlResourceVisitor_on_service(
+    void *const visitor,
+    NDDSA_Agent *const agent,
+    struct DDS_XMLObject *xml_obj)
+{
+    D2S2Log_METHOD_NAME(NDDSA_XmlResourceVisitor_on_service)
+    RTIBool retcode = RTI_FALSE;
+    D2S2Log_fn_entry()
+
+    retcode = NDDSA_XmlResourceVisitor_on_resource(
+                visitor, agent, xml_obj,
+                D2S2_RESOURCEKIND_SERVICE);
+
+    D2S2Log_fn_exit();
+    return retcode;
+}
+
+RTI_PRIVATE
+RTIBool
+NDDSA_XmlResourceVisitor_on_service_resource(
+    void *const visitor,
+    NDDSA_Agent *const agent,
+    struct DDS_XMLObject *xml_obj)
+{
+    D2S2Log_METHOD_NAME(NDDSA_XmlResourceVisitor_on_service_resource)
+    RTIBool retcode = RTI_FALSE;
+    D2S2Log_fn_entry()
+
+    retcode = NDDSA_XmlResourceVisitor_on_resource(
+                visitor, agent, xml_obj,
+                D2S2_RESOURCEKIND_SERVICE_RESOURCE);
+
+    D2S2Log_fn_exit();
+    return retcode;
+}
+
 void
 NDDSA_XmlResourceVisitor_initialize(
     NDDSA_XmlResourceVisitor *const self,
@@ -1510,6 +1653,8 @@ NDDSA_XmlResourceVisitor_initialize(
     self->base.on_subscriber = NDDSA_XmlResourceVisitor_on_subscriber;
     self->base.on_datawriter = NDDSA_XmlResourceVisitor_on_datawriter;
     self->base.on_datareader = NDDSA_XmlResourceVisitor_on_datareader;
+    self->base.on_service = NDDSA_XmlResourceVisitor_on_service;
+    self->base.on_service_resource = NDDSA_XmlResourceVisitor_on_service_resource;
     self->base.user_data = self;
     self->res_properties = *res_properties;
     

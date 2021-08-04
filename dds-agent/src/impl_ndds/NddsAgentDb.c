@@ -56,9 +56,6 @@ typedef struct NDDSA_StaticResourceIdI
         ref_len_ = strlen((id_)->value.ref);\
         if (ref_len_ > NDDSA_STATICRESOURCEID_REF_MAX_LENGTH)\
         {\
-            printf("RESOURCE ID too long (max: %u): %s\n",\
-                NDDSA_STATICRESOURCEID_REF_MAX_LENGTH,\
-                (id_)->value.ref);\
             *(ok_) = RTI_FALSE;\
         }\
         else \
@@ -79,8 +76,6 @@ D2S2_ResourceId_compare_record(
     D2S2_ResourceId *l = (D2S2_ResourceId*)left,
                    *r = (D2S2_ResourceId*)right;
     
-    // printf("D2S2_ResourceId_compare_record: left=%p, right=%p\n", l, r);
-
     switch (l->kind)
     {
         case D2S2_RESOURCEIDKIND_GUID:
@@ -89,7 +84,6 @@ D2S2_ResourceId_compare_record(
             {
                 case D2S2_RESOURCEIDKIND_GUID:
                 {
-                    // printf("    GUID vs GUID\n");
                     return RTIOsapiMemory_compare(
                             &l->value.guid,
                             &r->value.guid,
@@ -97,7 +91,6 @@ D2S2_ResourceId_compare_record(
                 }
                 default:
                 {
-                    // printf("    GUID vs other(%d)\n", r->kind);
                     return -1;
                 }
             }
@@ -108,13 +101,10 @@ D2S2_ResourceId_compare_record(
             {
                 case D2S2_RESOURCEIDKIND_REF:
                 {
-                    // printf("[REDAString_compare 1] REF vs REF ['%s' vs '%s']\n",
-                    //     l->value.ref, r->value.ref);
                     return REDAString_compare(l->value.ref, r->value.ref);
                 }
                 default:
                 {
-                    // printf("    REF vs other(%d)\n",r->kind);
                     return 1;
                 }
             }
@@ -177,9 +167,7 @@ D2S2_ClientKey_compare_record(
 
     ul = *l;
     ur = *r;
-    // printf("D2S2_ClientKey_compare_record: left=0x%X, right=0x%X\n", ul, ur);
     res = REDAOrderedDataType_compareUInt(&ul,&ur);
-    // printf("      D2S2_ClientKey_compare_record = %d\n", res);
     return res;
 }
 
@@ -197,8 +185,6 @@ D2S2_ClientSessionKey_compare_record(
     unsigned int ul = 0,
                  ur = 0;
 
-    // printf("D2S2_ClientSessionKey_compare_record >>> %p - %p\n", l, r);
-
     res = D2S2_ClientKey_compare_record(&l->client,&r->client);
     if (res != 0)
     {
@@ -208,9 +194,7 @@ D2S2_ClientSessionKey_compare_record(
     ul = l->id;
     ur = r->id;
 
-    // printf("D2S2_ClientSessionId_compare: left=0x%X, right=0x%X\n", ul, ur);
     res = REDAOrderedDataType_compareUInt(&ul,&ur);
-    // printf("      D2S2_ClientSessionId_compare = %d\n", res);
     return res;
 }
 
@@ -223,14 +207,8 @@ NDDSA_ClientSessionRecord_compare_record(
     int res = 0;
     NDDSA_ClientSessionRecord *l = (NDDSA_ClientSessionRecord*)left,
                              *r = (NDDSA_ClientSessionRecord*)right;
-    // printf("NDDSA_ClientSessionRecord_compare_record: left=[0x%X,0x%X], right=[0x%X,0x%X]\n",
-    //     l->session.base.key.client,
-    //     l->session.base.key.id,
-    //     r->session.base.key.client,
-    //     r->session.base.key.id);
     res = D2S2_ClientSessionKey_compare_record(
                 &l->session.base.key, &r->session.base.key);
-    // printf("      NDDSA_ClientSessionRecord_compare_record = %d\n", res);
     return res;
 }
 
@@ -572,12 +550,10 @@ NDDSA_AgentDb_initialize(
 done:
     if (!retcode)
     {
-        // printf("********** DB CREATION FAILED **************\n");
         if (initd_table_sessions)
         {
             if (self->cursor_p_worker_sessions != NULL)
             {
-                // printf("DELETING sessions TABLE\n");
                 if (!NDDSA_AgentDb_delete_table(
                         self,
                         &self->table_sessions,
@@ -596,7 +572,6 @@ done:
         {
             if (self->cursor_p_worker_resources != NULL)
             {
-                // printf("DELETING resources TABLE\n");
                 if (!NDDSA_AgentDb_delete_table(
                         self,
                         &self->table_resources,
@@ -867,8 +842,6 @@ NDDSA_AgentDb_lookup_record(
     
     if (REDACursor_gotoKeyEqual(cursor, &cursor_fail, key))
     {
-        // printf("  [CURSOR][GET] worker=%p, cursor=%p, key=%p\n",
-        //     worker, cursor, key);
         record = REDACursor_modifyReadWriteArea(cursor, &cursor_fail);
         if (record == NULL)
         {
@@ -880,12 +853,9 @@ NDDSA_AgentDb_lookup_record(
     retcode = RTI_TRUE;
 
 done:
-    if (!retcode)
+    if ((!retcode || record == NULL) && cursor_stack_size > 0)
     {
-        if (cursor_stack_size > 0)
-        {
-            REDACursor_finishSafe(cursor_stack, &cursor_stack_size);
-        }
+        REDACursor_finishSafe(cursor_stack, &cursor_stack_size);
     }
     D2S2Log_fn_exit()
     return retcode;
@@ -1071,7 +1041,7 @@ NDDSA_AgentDb_lock_resources(
 done:
     if (!retcode)
     {
-        if (cursor_stack_size > 0)
+        if (start_cursor && cursor_stack_size > 0)
         {
             REDACursor_finishSafe(cursor_stack, &cursor_stack_size);
         }
@@ -1830,13 +1800,6 @@ NDDSA_AgentDb_find_next_record(
     retcode = RTI_TRUE;
 
 done:
-    if (!retcode)
-    {
-        // if (cursor_stack_size > 0)
-        // {
-        //     REDACursor_finishSafe(cursor_stack, &cursor_stack_size);
-        // }
-    }
     D2S2Log_fn_exit()
     return retcode;
 }
@@ -1967,7 +1930,6 @@ done:
 RTIBool
 NDDSA_AgentDb_find_next_session_and_delete_previous(
     NDDSA_AgentDb *const self,
-    NDDSA_AgentDb_FilterRecordFn filter_record_fn,
     void *const filter_param,
     NDDSA_ClientSessionRecord *const prev_session,
     NDDSA_ClientSessionRecord **const record_out)
@@ -2027,13 +1989,6 @@ NDDSA_AgentDb_find_next_session_and_delete_previous(
             {
                 goto done;
             }
-
-            if (filter_record_fn != NULL &&
-                !filter_record_fn(self, record, filter_param))
-            {
-                REDACursor_finishReadWriteArea(cursor);
-                record = NULL;
-            }
         }
     } while (has_next && record == NULL);
     
@@ -2045,13 +2000,6 @@ NDDSA_AgentDb_find_next_session_and_delete_previous(
     retcode = RTI_TRUE;
 
 done:
-    if (!retcode)
-    {
-        // if (cursor_stack_size > 0)
-        // {
-        //     REDACursor_finishSafe(cursor_stack, &cursor_stack_size);
-        // }
-    }
     D2S2Log_fn_exit()
     return retcode;
 }
@@ -2125,7 +2073,7 @@ NDDSA_AgentDb_lock_sessions(
 done:
     if (!retcode)
     {
-        if (cursor_stack_size > 0)
+        if (start_cursor && cursor_stack_size > 0)
         {
             REDACursor_finishSafe(cursor_stack, &cursor_stack_size);
         }
@@ -2168,6 +2116,7 @@ NDDSA_AgentDb_unlock_sessions(
 
     if (finish_cursor)
     {
+    
         REDACursor_finishSafe(cursor_stack, &cursor_stack_size);
     }
     

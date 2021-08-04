@@ -319,7 +319,27 @@ NANO_XRCE_CreatePayload_finalize(NANO_XRCE_CreatePayload *const self)
         }
         break;
     }
-
+    case NANO_XRCE_OBJK_SERVICE:
+    {
+        switch (self->object_repr.value.service.base.repr.format)
+        {
+        case NANO_XRCE_REPRESENTATION_AS_XML_STRING:
+        {
+            RTIOsapiHeap_freeString(
+                self->object_repr.value.service.base.repr.value.xml.value);
+            break;
+        }
+        case NANO_XRCE_REPRESENTATION_BY_REFERENCE:
+        {
+            RTIOsapiHeap_freeString(
+                self->object_repr.value.service.base.repr.value.ref.value);
+            break;
+        }
+        default:
+            break;
+        }
+        break;
+    }
     default:
         break;
     }
@@ -564,6 +584,53 @@ NANO_XRCE_ProxyClient_on_submsg(
         
         break;
     }
+    case NANO_XRCE_SUBMESSAGEID_SERVICE_REQUEST:
+    {
+        NANO_XRCE_ServiceRequestPayload payload = NANO_XRCE_SERVICEREQUESTPAYLOAD_INITIALIZER;
+
+        NANO_CHECK_RC(
+            NANO_XRCE_ServiceRequestPayload_deserialize_cdr(&payload, &stream),
+            NANO_LOG_ERROR_MSG("FAILED to deserialize SERVICE_REQUEST payload"));
+
+        op_req_id = payload.base.request_id;
+        op_obj_id = payload.base.object_id;
+
+        req = NANO_XRCE_Agent_new_client_request(
+                agent,
+                self,
+                msg_hdr,
+                submsg_hdr,
+                &op_req_id,
+                &op_obj_id,
+                NANO_XRCE_SubmessageFlags_SERVICEREQUEST_confirm(submsg_hdr->flags) ||
+                    self->agent->props.confirm_all_requests);
+        if (req == NULL)
+        {
+            rc = NANO_RETCODE_TRY_AGAIN;
+            goto done;
+        }
+
+        NANO_LOG_DEBUG("SERVICE request",
+            NANO_LOG_KEY("client", *NANO_XRCE_Session_key(&self->session))
+            NANO_LOG_SESSIONID("session", *NANO_XRCE_Session_id(&self->session))
+            NANO_LOG_STREAMID("stream", msg_hdr->stream_id)
+            NANO_LOG_REQID("req_id", op_req_id)
+            NANO_LOG_OBJID("obj_id", op_obj_id)
+            NANO_LOG_H16("svc_flags", payload.flags)
+            NANO_LOG_H16("query_len", payload.query_len)
+            NANO_LOG_H32("data_len", payload.data_len)
+            NANO_LOG_H32("metadata_len", payload.metadata_len)
+            NANO_LOG_BOOL("has_payload", payload.has_payload)
+            NANO_LOG_BOOL("confirm", NANO_XRCE_SubmessageFlags_SERVICEREQUEST_confirm(submsg_hdr->flags))
+            NANO_LOG_BOOL("reply", req->reply)
+            NANO_LOG_PTR("payload", NANO_XRCE_BinData_contiguous_buffer(&payload.payload)))
+
+        NANO_CHECK_RC(
+            NANO_XRCE_Agent_on_submsg_servicereq(agent, req, &payload),
+            NANO_LOG_ERROR_MSG("FAILED to handle SERVICE_REQUEST submessage"));
+        
+        break;
+    }
     default:
     {
         NANO_LOG_WARNING("ignoring UNEXPECTED submessage",
@@ -591,13 +658,17 @@ done:
         if (/* return all failed requests here... */
             (NANO_RETCODE_OK != rc ||
             /* ...and also all successful ones which are not READ_DATA or
-                WRITE_DATA... */
+                WRITE_DATA or... */
             (submsg_hdr->id != NANO_XRCE_SUBMESSAGEID_READ_DATA &&
+                submsg_hdr->id != NANO_XRCE_SUBMESSAGEID_WRITE_DATA &&
                 submsg_hdr->id != NANO_XRCE_SUBMESSAGEID_WRITE_DATA)) &&
-            /* ...but not the DELETE(CLIENT) ones */
+            /* ...but not the DELETE(CLIENT) ones, and... */
             !(submsg_hdr->id == NANO_XRCE_SUBMESSAGEID_DELETE &&
                 NANO_XRCE_ObjectId_kind(&req->object_id) ==
-                    NANO_XRCE_OBJK_CLIENT))
+                    NANO_XRCE_OBJK_CLIENT) &&
+            /* ... neither SERVICE_REQUEST that are not oneway */
+            !(submsg_hdr->id == NANO_XRCE_SUBMESSAGEID_SERVICE_REQUEST &&
+                !NANO_XRCE_SubmessageFlags_SERVICEREQUEST_oneway(submsg_hdr->flags)))
         {
             NANO_XRCE_Agent_return_client_request(agent, req);
         }
@@ -615,6 +686,7 @@ NANO_XRCE_ProxyClient_dismiss_forward_request(
     NANO_RetCode rc = NANO_RETCODE_ERROR;
     NANO_XRCE_ForwardDataRequest *fwd_req = NULL;
     const D2S2_ReceivedData *rcvd_data = NULL;
+    NANO_bool is_data = NANO_BOOL_TRUE;
     
     NANO_LOG_FN_ENTRY
     
@@ -642,14 +714,43 @@ NANO_XRCE_ProxyClient_dismiss_forward_request(
 
     if (fwd_req == NULL)
     {
-        rc = NANO_RETCODE_OK;
-        goto done;
+        is_data = NANO_BOOL_FALSE;
+
+        fwd_req = (NANO_XRCE_ForwardDataRequest*)
+            REDAInlineList_getFirst(&self->forward_replies);
+
+        while (fwd_req != NULL)
+        {
+            NANO_i8 cmp_res = 0;
+
+            if (fwd_req->stream_id == stream_id)
+            {
+                NANO_XRCE_SeqNum_compare(&fwd_req->sn, data_sn, &cmp_res);
+                if (cmp_res == 0)
+                {
+                    break;
+                }
+            }
+
+            fwd_req = (NANO_XRCE_ForwardDataRequest*)
+                REDAInlineListNode_getNext(&fwd_req->node);
+        }
+
+        if (fwd_req == NULL)
+        {
+            rc = NANO_RETCODE_OK;
+            goto done;
+        }
+        REDAInlineList_removeNodeEA(&self->forward_replies, &fwd_req->node);
+    }
+    else
+    {
+        REDAInlineList_removeNodeEA(&self->forwards, &fwd_req->node);
     }
 
     rcvd_data = fwd_req->rcvd_data;
-
-    REDAInlineList_removeNodeEA(&self->forwards, &fwd_req->node);
     REDAFastBufferPool_returnBuffer(self->forwards_pool, fwd_req);
+
 
     NANO_LOG_TRACE("DISMISSED forward request",
             NANO_LOG_KEY("session.key",*NANO_XRCE_Session_key(&self->session))
@@ -663,17 +764,35 @@ done:
 
     if (rcvd_data != NULL)
     {
-        if (DDS_RETCODE_OK !=
-                D2S2_Agent_return_loan(
-                    self->agent->base.agent,
-                    &self->agent->base,
-                    self->dds_session,
-                    (D2S2_ReceivedData*)rcvd_data))
+        if (is_data)
         {
-            NANO_LOG_WARNING("FAILED to return loan to agent",
-                NANO_LOG_KEY("session.key",*NANO_XRCE_Session_key(&self->session))
-                NANO_LOG_SESSIONID("session.id",*NANO_XRCE_Session_id(&self->session)))
-            rc = NANO_RETCODE_ERROR;
+            if (DDS_RETCODE_OK !=
+                    D2S2_Agent_return_loan(
+                        self->agent->base.agent,
+                        &self->agent->base,
+                        self->dds_session,
+                        (D2S2_ReceivedData*)rcvd_data))
+            {
+                NANO_LOG_WARNING("FAILED to return loan to agent",
+                    NANO_LOG_KEY("session.key",*NANO_XRCE_Session_key(&self->session))
+                    NANO_LOG_SESSIONID("session.id",*NANO_XRCE_Session_id(&self->session)))
+                rc = NANO_RETCODE_ERROR;
+            }
+        }
+        else
+        {
+            if (DDS_RETCODE_OK !=
+                    D2S2_Agent_return_external_service_reply(
+                        self->agent->base.agent,
+                        &self->agent->base,
+                        self->dds_session,
+                        (D2S2_ReceivedData*)rcvd_data))
+            {
+                NANO_LOG_WARNING("FAILED to return loan to agent",
+                    NANO_LOG_KEY("session.key",*NANO_XRCE_Session_key(&self->session))
+                    NANO_LOG_SESSIONID("session.id",*NANO_XRCE_Session_id(&self->session)))
+                rc = NANO_RETCODE_ERROR;
+            }
         }
     }
     NANO_LOG_FN_EXIT_RC(rc)
@@ -708,7 +827,8 @@ NANO_XRCE_ProxyClient_on_send_complete(
         NANO_LOG_SUBMSGHDR("submsg",*submsg_hdr))
     
     if (submsg_hdr->id == NANO_XRCE_SUBMESSAGEID_DATA ||
-        submsg_hdr->id == NANO_XRCE_SUBMESSAGEID_FRAGMENT)
+        submsg_hdr->id == NANO_XRCE_SUBMESSAGEID_FRAGMENT ||
+        submsg_hdr->id == NANO_XRCE_SUBMESSAGEID_SERVICE_REPLY)
     {
         /* Lookup forward data request and return loan to D2S2_Agent */
         NANO_CHECK_RC(
@@ -898,7 +1018,10 @@ NANO_XRCE_ProxyClient_initialize(
     transport_props.id = client_repr->session_id;
 #if NANO_FEAT_MTU_IN_CLIENT_REPR
     transport_props.base.mtu = client_repr->mtu;
+    NANO_LOG_DEBUG("client MTU",
+        NANO_LOG_U16("mtu", transport_props.base.mtu))
 #endif /* NANO_FEAT_MTU_IN_CLIENT_REPR */
+
 
     NANO_CHECK_RC(
         NANO_XRCE_Session_initialize(&self->session, &session_props),

@@ -32,7 +32,9 @@ typedef enum D2S2_ResourceKindI
     D2S2_RESOURCEKIND_DOMAIN              = 0x07,
     D2S2_RESOURCEKIND_TYPE                = 0x08,
     D2S2_RESOURCEKIND_QOSPROFILE          = 0x09,
-    D2S2_RESOURCEKIND_APPLICATION         = 0x0A
+    D2S2_RESOURCEKIND_APPLICATION         = 0x0A,
+    D2S2_RESOURCEKIND_SERVICE             = 0x1F,
+    D2S2_RESOURCEKIND_SERVICE_RESOURCE    = 0x2F,
 } D2S2_ResourceKind;
 
 #define D2S2_ResourceKind_to_str(s_) \
@@ -56,6 +58,10 @@ typedef enum D2S2_ResourceKindI
         "QOSPROFILE" : \
     ((s_) == D2S2_RESOURCEKIND_APPLICATION)?\
         "APPLICATION" : \
+    ((s_) == D2S2_RESOURCEKIND_SERVICE)?\
+        "SERVICE" :\
+    ((s_) == D2S2_RESOURCEKIND_SERVICE_RESOURCE)?\
+        "SERVICE_RESOURCE" :\
         "UNKNOWN")
 
 typedef enum D2S2_ResourceIdKindI
@@ -117,16 +123,18 @@ D2S2_ResourceId_set_guid(D2S2_ResourceId *const self, const DDS_GUID_t *guid);
 
 DDS_SEQUENCE(D2S2_ResourceIdSeq, D2S2_ResourceId);
 
-#define D2S2_ENTITYNAME_DEPTH_LIBRARY         1
-#define D2S2_ENTITYNAME_DEPTH_APPLICATION     2
-#define D2S2_ENTITYNAME_DEPTH_PARTICIPANT     2
-#define D2S2_ENTITYNAME_DEPTH_QOSPROFILE      2
-#define D2S2_ENTITYNAME_DEPTH_DOMAIN          2
-#define D2S2_ENTITYNAME_DEPTH_PUBLISHER       3
-#define D2S2_ENTITYNAME_DEPTH_SUBSCRIBER      3
-#define D2S2_ENTITYNAME_DEPTH_TOPIC           3
-#define D2S2_ENTITYNAME_DEPTH_DATAWRITER      4
-#define D2S2_ENTITYNAME_DEPTH_DATAREADER      4
+#define D2S2_ENTITYNAME_DEPTH_LIBRARY           1
+#define D2S2_ENTITYNAME_DEPTH_APPLICATION       2
+#define D2S2_ENTITYNAME_DEPTH_PARTICIPANT       2
+#define D2S2_ENTITYNAME_DEPTH_QOSPROFILE        2
+#define D2S2_ENTITYNAME_DEPTH_DOMAIN            2
+#define D2S2_ENTITYNAME_DEPTH_PUBLISHER         3
+#define D2S2_ENTITYNAME_DEPTH_SUBSCRIBER        3
+#define D2S2_ENTITYNAME_DEPTH_TOPIC             3
+#define D2S2_ENTITYNAME_DEPTH_DATAWRITER        4
+#define D2S2_ENTITYNAME_DEPTH_DATAREADER        4
+#define D2S2_ENTITYNAME_DEPTH_SERVICE           1
+#define D2S2_ENTITYNAME_DEPTH_SERVICE_RESOURCE  2
 
 typedef struct D2S2_EntityNameI
 {
@@ -447,6 +455,213 @@ typedef struct D2S2_ReceivedDataI
     NULL /* data */\
 }
 
+typedef struct D2S2_AgentServerInterfaceI D2S2_AgentServerInterface;
+
+typedef struct D2S2_ClientSessionEventI
+{
+    D2S2_AgentServerInterface *intf;
+    D2S2_ClientSessionKey session_key;
+    void *listener;    
+} D2S2_ClientSessionEvent;
+
+
+typedef DDS_UnsignedLong D2S2_ExternalServiceRequestFlags;
+#define D2S2_EXTERNALSERVICEREQUESTFLAGS_UNKNOWN    ((D2S2_ExternalServiceRequestFlags)0)
+
+typedef DDS_UnsignedLongLong D2S2_ExternalServiceRequestToken;
+#define D2S2_EXTERNALSERVICEREQUESTTOKEN_UNKNOWN    ((D2S2_ExternalServiceRequestToken)0)
+
+typedef DDS_UnsignedLong D2S2_ExternalServiceReplyStatus;
+#define D2S2_EXTERNALSERVICEREPLYSTATUS_UNKNOWN    ((D2S2_ExternalServiceReplyStatus)0)
+
+typedef struct D2S2_ExternalServiceReplyI
+{
+    D2S2_ExternalServiceRequestToken request;
+    D2S2_ExternalServiceReplyStatus status;
+    DDS_UnsignedLong data_len;
+    DDS_UnsignedLong metadata_len;
+    D2S2_Buffer data;
+} D2S2_ExternalServiceReply;
+
+#define D2S2_EXTERNALSERVICEREPLY_INITIALIZER \
+{\
+    D2S2_EXTERNALSERVICEREQUESTTOKEN_UNKNOWN /* request */,\
+    D2S2_EXTERNALSERVICEREPLYSTATUS_UNKNOWN /* status */,\
+    0, /* data_len */\
+    0, /* metadata_len */\
+    D2S2_BUFFER_INITIALIZER /* data*/,\
+}
+
+typedef struct D2S2_ExternalServicePluginI D2S2_ExternalServicePlugin;
+
+typedef DDS_ReturnCode_t
+    (*D2S2_ExternalServicePlugin_CreateServiceFn)(
+        D2S2_ExternalServicePlugin *const self,
+        D2S2_Agent *const agent,
+        const D2S2_ResourceId *const svc_id,
+        const char * const svc_url,
+        const char * const svc_descriptor,
+        void **const svc_data_out);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_ExternalServicePlugin_DeleteServiceFn)(
+        D2S2_ExternalServicePlugin *const self,
+        void *const svc_data);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_ExternalServicePlugin_CreateResourceFn)(
+        D2S2_ExternalServicePlugin *const self,
+        void *const svc_data,
+        const D2S2_ResourceId *const svc_resource_id,
+        const char *const svc_resource_path,
+        const char *const svc_resource_descriptor,
+        void **const svc_resource_data_out);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_ExternalServicePlugin_DeleteResourceFn)(
+        D2S2_ExternalServicePlugin *const self,
+        void *const svc_resource_data);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_ExternalServicePlugin_MakeRequestFn)(
+        D2S2_ExternalServicePlugin *const self,
+        void *const svc_resource_data,
+        const D2S2_ExternalServiceRequestFlags request_flags,
+        const D2S2_Buffer *const request_query,
+        const D2S2_Buffer *const request_data,
+        const D2S2_Buffer *const request_metadata,
+        const DDS_Boolean no_reply,
+        D2S2_ExternalServiceRequestToken *const svc_request_token_out,
+        RTIBool *const complete_out);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_ExternalServicePlugin_CancelRequestFn)(
+        D2S2_ExternalServicePlugin *const self,
+        void *const svc_resource_data,
+        const D2S2_ExternalServiceRequestToken request_token);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_ExternalServicePlugin_TakeReplyFn)(
+        D2S2_ExternalServicePlugin *const self,
+        void *const svc_resource_data,
+        const D2S2_ExternalServiceRequestToken request_token,
+        D2S2_ExternalServiceReply **const reply_out);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_ExternalServicePlugin_ReturnReplyFn)(
+        D2S2_ExternalServicePlugin *const self,
+        void *const svc_resource_data,
+        const D2S2_ExternalServiceReply * const reply);
+
+typedef struct D2S2_ExternalServicePluginIntfI
+{
+    D2S2_ExternalServicePlugin_CreateServiceFn create_service;
+    D2S2_ExternalServicePlugin_DeleteServiceFn delete_service;
+    D2S2_ExternalServicePlugin_CreateResourceFn create_resource;
+    D2S2_ExternalServicePlugin_DeleteResourceFn delete_resource;
+    D2S2_ExternalServicePlugin_MakeRequestFn make_request;
+    D2S2_ExternalServicePlugin_CancelRequestFn cancel_request;
+    D2S2_ExternalServicePlugin_TakeReplyFn take_reply;
+    D2S2_ExternalServicePlugin_ReturnReplyFn return_reply;
+} D2S2_ExternalServicePluginIntf;
+
+typedef struct D2S2_ExternalServicePluginI
+{
+    struct REDAInlineListNode node;
+    const D2S2_ExternalServicePluginIntf *intf;
+    const char *const * supported_protocols;
+} D2S2_ExternalServicePlugin;
+
+#define D2S2_EXTERNALSERVICEPLUGIN_INITIALIZER \
+{\
+    REDAInlineListNode_INITIALIZER, /* node */\
+    NULL, /* intf */\
+    NULL  /* supported_protocols */\
+}
+
+DDS_ReturnCode_t
+D2S2_ExternalServicePlugin_create_service(
+    D2S2_ExternalServicePlugin *const self,
+    D2S2_Agent * const agent,
+    const D2S2_ResourceId *const svc_id,
+    const char * const svc_url,
+    const char * const svc_descriptor,
+    void **const svc_data_out);
+
+#define D2S2_ExternalServicePlugin_create_service(s_, a_, si_, su_, sd_, sdo_) \
+  (s_)->intf->create_service((s_), (a_), (si_), (su_), (sd_), (sdo_))
+
+DDS_ReturnCode_t
+D2S2_ExternalServicePlugin_delete_service(
+    D2S2_ExternalServicePlugin *const self,
+    void *const svc_data);
+
+#define D2S2_ExternalServicePlugin_delete_service(s_, sd_) \
+  (s_)->intf->delete_service((s_), (sd_))
+
+DDS_ReturnCode_t
+D2S2_ExternalServicePlugin_create_resource(
+    D2S2_ExternalServicePlugin *const self,
+    void *const svc_data,
+    const D2S2_ResourceId *const svc_resource_id,
+    const char *const svc_resource_path,
+    const char *const svc_resource_descriptor,
+    void **const svc_resource_data_out);
+
+#define D2S2_ExternalServicePlugin_create_resource(s_,  sd_, sri_, srp_, srd_, srdo_) \
+  (s_)->intf->create_resource((s_), (sd_), (sri_), (srp_), (srd_), (srdo_))
+
+DDS_ReturnCode_t
+D2S2_ExternalServicePlugin_delete_resource(
+    D2S2_ExternalServicePlugin *const self,
+    void *const svc_resource_data);
+
+#define D2S2_ExternalServicePlugin_delete_resource(s_, srd_) \
+  (s_)->intf->delete_resource((s_), (srd_))
+
+DDS_ReturnCode_t
+D2S2_ExternalServicePlugin_make_request(
+    D2S2_ExternalServicePlugin *const self,
+    void *const svc_resource_data,
+    const D2S2_ExternalServiceRequestFlags request_flags,
+    const D2S2_Buffer *const request_query,
+    const D2S2_Buffer *const request_data,
+    const D2S2_Buffer *const request_metadata,
+    const DDS_Boolean no_reply,
+    D2S2_ExternalServiceRequestToken *const svc_request_token_out,
+    RTIBool *const complete_out);
+
+#define D2S2_ExternalServicePlugin_make_request(s_, srd_, rf_, rq_, rd_, rmd_, nr_, srto_, co_) \
+  (s_)->intf->make_request((s_), (srd_), (rf_), (rq_), (rd_), (rmd_), (nr_), (srto_), (co_))
+
+DDS_ReturnCode_t
+D2S2_ExternalServicePlugin_cancel_request(
+    D2S2_ExternalServicePlugin *const self,
+    void *const svc_resource_data,
+    const D2S2_ExternalServiceRequestToken request_token);
+
+#define D2S2_ExternalServicePlugin_cancel_request(s_, srd_, rtk_) \
+  (s_)->intf->cancel_request((s_), (srd_), (rtk_))
+
+DDS_ReturnCode_t
+D2S2_ExternalServicePlugin_take_reply(
+    D2S2_ExternalServicePlugin *const self,
+    void *const svc_resource_data,
+    const D2S2_ExternalServiceRequestToken request_token,
+    const D2S2_ExternalServiceReply **const reply_out);
+
+#define D2S2_ExternalServicePlugin_take_reply(s_, srd_, rtk_, ro_) \
+  (s_)->intf->take_reply((s_), (srd_), (rtk_), (ro_))
+
+DDS_ReturnCode_t
+D2S2_ExternalServicePlugin_return_reply(
+    D2S2_ExternalServicePlugin *const self,
+    void *const svc_resource_data,
+    const D2S2_ExternalServiceReply * const reply);
+
+#define D2S2_ExternalServicePlugin_return_reply(s_, srd_, rep_) \
+  (s_)->intf->return_reply((s_), (srd_), (rep_))
+
 typedef union D2S2_AgentConfigValueI
 {
     const char *url;
@@ -476,7 +691,6 @@ typedef struct D2S2_AgentConfigI
     D2S2_AGENTCONFIGFORMAT_UNKNOWN, /* fmt */\
     D2S2_AGENTCONFIGVALUE_INITIALIZER /* value */\
 }
-
 
 typedef D2S2_Agent*
     (*D2S2_Agent_CreateFn)();
@@ -508,13 +722,17 @@ typedef struct D2S2_ResourcePropertiesI
     0 /* domain_id */\
 }
 
-typedef struct D2S2_AgentServerInterfaceI D2S2_AgentServerInterface;
 
 typedef 
 DDS_ReturnCode_t
     (*D2S2_Agent_RegisterInterfaceFn)(
         D2S2_Agent *const self,
         D2S2_AgentServerInterface *const intf);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_Agent_RegisterExternalServicePluginFn)(
+        D2S2_Agent *const self,
+        D2S2_ExternalServicePlugin *const service_plugin);
 
 typedef DDS_ReturnCode_t
     (*D2S2_Agent_OpenSessionFn)(
@@ -593,6 +811,32 @@ typedef DDS_ReturnCode_t
         void *const request_param);
 
 typedef DDS_ReturnCode_t
+    (*D2S2_Agent_MakeExternalServiceRequestFn)(
+        D2S2_Agent *const self,
+        D2S2_AgentServerInterface *const src,
+        D2S2_ClientSession *const session,
+        const D2S2_AttachedResourceId svc_res_id,
+        const DDS_UnsignedLong svc_flags,
+        const D2S2_Buffer * const svc_query,
+        const D2S2_Buffer * const svc_data,
+        const D2S2_Buffer * const svc_metadata,
+        const DDS_Boolean no_reply,
+        void *const request_param);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_Agent_ReturnExternalServiceReplyFn)(
+        D2S2_Agent *const self,
+        D2S2_AgentServerInterface *const src,
+        D2S2_ClientSession *const session,
+        D2S2_ReceivedData *const data);
+
+typedef DDS_ReturnCode_t
+    (*D2S2_Agent_ExternalServiceReplyAvailableFn)(
+        D2S2_Agent *const self,
+        const D2S2_ResourceId *const svc_res_id,
+        const D2S2_ExternalServiceRequestToken req_token);
+
+typedef DDS_ReturnCode_t
     (*D2S2_Agent_LoadResourcesFromXmlFn)(
         D2S2_Agent *const self,
         const char *const xml_url,
@@ -618,12 +862,6 @@ typedef DDS_ReturnCode_t
         const D2S2_ResourceKind resource_kind,
         D2S2_AttachedResourceId *const id_out);
 
-typedef struct D2S2_ClientSessionEventI
-{
-    D2S2_AgentServerInterface *intf;
-    D2S2_ClientSessionKey session_key;
-    void *listener;    
-} D2S2_ClientSessionEvent;
 
 typedef void
     (*D2S2_Agent_OnSessionEventCallback)(
@@ -656,6 +894,7 @@ typedef struct D2S2_AgentIntfI
 {
     D2S2_Agent_DeleteFn delete_agent;
     D2S2_Agent_RegisterInterfaceFn register_interface;
+    D2S2_Agent_RegisterExternalServicePluginFn register_external_service_plugin;
     D2S2_Agent_OpenSessionFn open_session;
     D2S2_Agent_CloseSessionFn close_session;
     D2S2_Agent_CreateResourceFn create_resource;
@@ -666,6 +905,9 @@ typedef struct D2S2_AgentIntfI
     D2S2_Agent_ReturnLoanFn return_loan;
     D2S2_Agent_WriteFn write;
     D2S2_Agent_ReceiveMessageFn receive_message;
+    D2S2_Agent_MakeExternalServiceRequestFn make_external_service_request;
+    D2S2_Agent_ReturnExternalServiceReplyFn return_external_service_reply;
+    D2S2_Agent_ExternalServiceReplyAvailableFn external_service_reply_available;
     D2S2_Agent_LoadResourcesFromXmlFn load_resources_from_xml;
     D2S2_Agent_StartFn start;
     D2S2_Agent_StopFn stop;
@@ -679,6 +921,7 @@ typedef struct D2S2_AgentIntfI
 {\
     NULL, /* delete_agent */\
     NULL, /* register_interface */\
+    NULL, /* register_external_service_plugin */\
     NULL, /* open_session */\
     NULL, /* close_session */\
     NULL, /* create_resource */\
@@ -689,6 +932,9 @@ typedef struct D2S2_AgentIntfI
     NULL, /* return_loan */\
     NULL, /* write */\
     NULL, /* receive_message */\
+    NULL, /* make_external_service_request */\
+    NULL, /* return_external_service_reply */\
+    NULL, /* external_service_reply_available */\
     NULL, /* load_resources_from_config */\
     NULL, /* start */\
     NULL, /* stop */\
@@ -721,6 +967,14 @@ D2S2_Agent_register_interface(
 
 #define D2S2_Agent_register_interface(s_,i_) \
     (s_)->intf->register_interface((s_),(i_))
+
+DDS_ReturnCode_t
+D2S2_Agent_register_external_service_plugin(
+    D2S2_Agent *const self,
+    D2S2_ExternalServicePlugin *const service_plugin);
+
+#define D2S2_Agent_register_external_service_plugin(s_, svc_) \
+    (s_)->intf->register_external_service_plugin((s_), (svc_))
 
 DDS_ReturnCode_t
 D2S2_Agent_open_session(
@@ -824,6 +1078,41 @@ D2S2_Agent_write(
 
 #define D2S2_Agent_write(s_,si_,sk_,w_,d_,rp_) \
     (s_)->intf->write((s_),(si_),(sk_),(w_),(d_),(rp_))
+
+DDS_ReturnCode_t
+D2S2_Agent_make_external_service_request(
+    D2S2_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    D2S2_ClientSession *const session,
+    const D2S2_AttachedResourceId svc_res_id,
+    const D2S2_ExternalServiceRequestFlags svc_flags,
+    const D2S2_Buffer * const svc_query,
+    const D2S2_Buffer * const svc_data,
+    const D2S2_Buffer * const svc_metadata,
+    const DDS_Boolean no_reply,
+    void *const request_param);
+
+#define D2S2_Agent_make_external_service_request(s_, si_, sk_, sri_, sf_, sq_, sd_, smd_, nrp_, rp_) \
+  (s_)->intf->make_external_service_request((s_), (si_), (sk_), (sri_), (sf_), (sq_), (sd_), (smd_), (nrp_), (rp_))
+
+DDS_ReturnCode_t
+D2S2_Agent_return_external_service_reply(
+    D2S2_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    D2S2_ClientSession *const session,
+    D2S2_ReceivedData *const data);
+
+#define D2S2_Agent_return_external_service_reply(s_, si_, sk_, d_) \
+  (s_)->intf->return_external_service_reply((s_), (si_), (sk_), (d_))
+
+DDS_ReturnCode_t
+D2S2_Agent_external_service_reply_available(
+    D2S2_Agent *const self,
+    const D2S2_ResourceId *const svc_res_id,
+    const D2S2_ExternalServiceRequestToken req_token);
+
+#define D2S2_Agent_external_service_reply_available(s_, sri_, rtk_) \
+  (s_)->intf->external_service_reply_available((s_), (sri_), (rtk_))
 
 DDS_ReturnCode_t
 D2S2_Agent_load_resources_from_xml(

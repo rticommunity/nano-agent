@@ -223,7 +223,6 @@ NDDSA_AgentDb_find_next_session(
 RTIBool
 NDDSA_AgentDb_find_next_session_and_delete_previous(
     NDDSA_AgentDb *const self,
-    NDDSA_AgentDb_FilterRecordFn filter_record_fn,
     void *const filter_param,
     NDDSA_ClientSessionRecord *const prev_session,
     NDDSA_ClientSessionRecord **const record_out);

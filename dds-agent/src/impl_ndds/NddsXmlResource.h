@@ -103,6 +103,14 @@ NDDSA_ResourceFactory_create_qos_library_xml(
     const D2S2_ResourceProperties *const properties,
     struct NDDSA_CreatedResourceLogSeq *const qos_profiles_out);
 
+RTIBool
+NDDSA_ResourceFactory_create_service_xml(
+    NDDSA_ResourceFactory *const self,
+    const char *const svc_server_xml,
+    const D2S2_ResourceProperties *const properties,
+    struct NDDSA_CreatedResourceLogSeq *const svc_servers_out,
+    struct NDDSA_CreatedResourceLogSeq *const svc_resources_out);
+
 #endif /* DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT */
 
 #endif /* NddsXmlResource_h */

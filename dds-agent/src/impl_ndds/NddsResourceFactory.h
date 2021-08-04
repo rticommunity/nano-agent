@@ -30,12 +30,14 @@ typedef struct NDDSA_CreatedResourceLogI
 {
     D2S2_ResourceId id;
     D2S2_ResourceKind kind;
+    void * data;
 } NDDSA_CreatedResourceLog;
 
 #define NDDSA_CREATEDRESOURCELOG_INITIALIZER \
 {\
     D2S2_RESOURCEID_INITIALIZER, /* id */\
-    D2S2_RESOURCEKIND_UNKNOWN /* kind */\
+    D2S2_RESOURCEKIND_UNKNOWN, /* kind */\
+    NULL /* data */\
 }
 
 DDS_SEQUENCE(NDDSA_CreatedResourceLogSeq, NDDSA_CreatedResourceLog);
@@ -84,11 +86,11 @@ NDDSA_ResourceFactory_create_resource_native(
     const D2S2_ResourceProperties *const properties,
     struct NDDSA_CreatedResourceLogSeq *const created_out);
 
-RTIBool
-NDDSA_ResourceFactory_delete_entity_resource(
-    NDDSA_ResourceFactory *const self,
-    const D2S2_ResourceKind kind,
-    const D2S2_ResourceId *const id);
+// RTIBool
+// NDDSA_ResourceFactory_delete_entity_resource(
+//     NDDSA_ResourceFactory *const self,
+//     const D2S2_ResourceKind kind,
+//     const D2S2_ResourceId *const id);
 
 RTIBool
 NDDSA_ResourceFactory_lookup_entity_resource(

@@ -38,6 +38,7 @@ struct NANO_XRCE_ProxyClientI
     struct REDAInlineList stream_storage;
     NANO_XRCE_Agent *agent;
     struct REDAInlineList forwards;
+    struct REDAInlineList forward_replies;
     NANO_bool disposed;
     NANO_XRCE_ProxyClientRequest *dispose_request;
     D2S2_ClientSessionEvent *event_hb;
@@ -57,6 +58,7 @@ struct NANO_XRCE_ProxyClientI
     REDA_INLINE_LIST_EMPTY, /* stream_storage */\
     NULL, /* agent */\
     REDA_INLINE_LIST_EMPTY, /* forwards */\
+    REDA_INLINE_LIST_EMPTY, /* forward_replies */\
     NANO_BOOL_FALSE, /* disposed */\
     NULL, /* dispose_request */\
     NULL, /* event_hb */\

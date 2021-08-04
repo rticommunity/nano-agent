@@ -24,9 +24,9 @@
 #if DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT
 
 #include "NddsResource.h"
+#include "NddsExternalService.h"
 
 typedef struct NDDSA_ClientI NDDSA_Client;
-typedef struct NDDSA_ClientSessionI NDDSA_ClientSession;
 typedef struct NDDSA_ReadI NDDSA_Read;
 
 typedef struct NDDSA_AttachedResourceI
@@ -37,6 +37,7 @@ typedef struct NDDSA_AttachedResourceI
     NDDSA_ClientSession *session;
     void *user_data;
     NDDSA_Read *read_req;
+    NDDSA_ExternalServiceRequest *svc_req;
     struct DDS_SequenceNumber_t last_sample_forwarded;
     struct DDS_SequenceNumber_t last_sample_returned;
 } NDDSA_AttachedResource;
@@ -49,6 +50,7 @@ typedef struct NDDSA_AttachedResourceI
     NULL, /* session */\
     NULL, /* user_data */\
     NULL, /* read_req */\
+    NULL, /* svc_req */\
     DDS_SEQUENCENUMBER_DEFAULT, /* last_sample_forwarded */\
     DDS_SEQUENCENUMBER_DEFAULT  /* last_sample_returned */\
 }

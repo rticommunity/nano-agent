@@ -16,7 +16,7 @@
   
 -->
 <!-- dds --> 
-<!ELEMENT dds (qos_library|types|type_library|domain_library|participant_library|domain_participant_library|application_library)+>
+<!ELEMENT dds (qos_library|types|type_library|domain_library|participant_library|domain_participant_library|application_library|external_service)+>
 <!ATTLIST dds xmlns:xsi CDATA #IMPLIED>
 <!ATTLIST dds xsi:noNamespaceSchemaLocation CDATA #IMPLIED>
 <!ATTLIST dds version CDATA "6.0.0">
@@ -52,6 +52,19 @@
 <!-- application -->
 <!ELEMENT application (domain_participant)+>
 <!ATTLIST application name CDATA #REQUIRED>
+
+<!-- external_service -->
+<!ELEMENT external_service descriptor?, (resource*)>
+<!ATTLIST external_service name NMTOKEN #REQUIRED>
+<!ATTLIST external_service proto NMTOKEN #REQUIRED>
+
+<!-- service_descriptor -->
+<!ELEMENT service_descriptor (#PCDATA) >
+
+<!-- service_resource -->
+<!ELEMENT service_resource  (#PCDATA)? >
+<!ATTLIST service_resource name NMTOKEN #REQUIRED>
+<!ATTLIST service_resource path CDATA #REQUIRED>
 
 <!-- domain_participant -->
 <!ELEMENT domain_participant (

@@ -27,7 +27,7 @@
     ((size_t)&(((TYPE *)0)->ELEMENT))
 
 typedef struct NDDSA_AgentI NDDSA_Agent;
-
+typedef struct NDDSA_ClientSessionI NDDSA_ClientSession;
 
 /******************************************************************************
  *                               D2S2_Buffer

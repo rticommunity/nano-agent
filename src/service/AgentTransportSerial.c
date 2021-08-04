@@ -115,7 +115,11 @@ NANO_XRCE_SerialAgentTransport_RecvThread_impl(
                 &msg_len,
                 src_addr.address);
 
-        if (NANO_RETCODE_OK == rc)
+        if (!self->agent_transport->active)
+        {
+            continue;
+        }
+        else if (NANO_RETCODE_OK == rc)
         {
             if ((msg_len >= NANO_XRCE_MESSAGE_SERIALIZED_SIZE_MIN))
             {

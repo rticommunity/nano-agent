@@ -55,8 +55,12 @@ struct NDDSA_AgentI
     struct REDAFastBufferPool *pool_reads;
     struct REDAFastBufferPool *pool_samples;
     struct REDAFastBufferPool *pool_events_session;
+    struct REDAFastBufferPool *pool_service_requests;
+    struct REDAFastBufferPool *pool_service_replies;
+    struct REDAFastBufferPool *pool_service_pending_requests;
     struct RTIClock *clock;
     struct REDAInlineList interfaces;
+    struct REDAInlineList service_plugins;
     struct RTIEventTimer *timer;
     struct RTIEventActiveGenerator *generator;
     struct RTIEventActiveGeneratorListener generator_listener;
@@ -85,8 +89,12 @@ struct NDDSA_AgentI
     NULL, /* pool_reads */\
     NULL, /* pool_samples */\
     NULL, /* pool_events_session */\
+    NULL, /* pool_service_requests */\
+    NULL, /* pool_service_replies */\
+    NULL, /* pool_service_pending_requests */\
     NULL, /* clock */\
     REDA_INLINE_LIST_EMPTY, /* interfaces */\
+    REDA_INLINE_LIST_EMPTY, /* services */\
     NULL, /* timer */\
     NULL,  /* generator */\
     RTI_EVENTACTIVEGENERATORLISTENER_INITIALIZER, /* generator_listener */\
@@ -265,6 +273,26 @@ NDDSA_Agent_generate_attached_resource_id(
     const D2S2_ResourceId *resource_id,
     const D2S2_ResourceKind resource_kind,
     D2S2_AttachedResourceId *const id_out);
+
+DDS_ReturnCode_t
+NDDSA_Agent_make_external_service_requestEA(
+    NDDSA_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    NDDSA_ClientSessionRecord *const session_rec,
+    NDDSA_AttachedResource *const attached,
+    const DDS_UnsignedLong svc_flags,
+    const D2S2_Buffer * const svc_query,
+    const D2S2_Buffer * const svc_data,
+    const D2S2_Buffer * const svc_metadata,
+    const DDS_Boolean no_reply);
+
+DDS_ReturnCode_t
+NDDSA_Agent_cancel_external_service_requestEA(
+    NDDSA_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    NDDSA_ClientSessionRecord *const session_rec,
+    NDDSA_ResourceRecord *const resource_rec,
+    NDDSA_AttachedResource *const attached);
 
 /******************************************************************************
  * Helper Macros to lookup and lock a Session

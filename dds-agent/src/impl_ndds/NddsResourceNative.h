@@ -24,9 +24,9 @@
 #if DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT
 
 #include "NddsInfrastructure.h"
+#include "NddsExternalService.h"
 
 typedef struct NDDSA_ResourceI NDDSA_Resource;
-
 
 typedef struct NDDSA_GenericResourceI
 {
@@ -59,6 +59,8 @@ typedef union NDDSA_EntityResourceI
     DDS_Subscriber *subscriber;
     DDS_DataWriter *writer;
     DDS_DataReader *reader;
+    NDDSA_ExternalService *service;
+    NDDSA_ExternalServiceResource *service_resource;
 } NDDSA_EntityResource;
 
 #define NDDSA_ENTITYRESOURCE_INITIALIZER \

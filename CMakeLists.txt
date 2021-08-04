@@ -57,6 +57,11 @@ nano_project_option(
     ${${PROJECT_NAME}_ENABLE_CLIENT_CPP}
     "Include nano-client Arduino-compatible API in build")
 
+nano_project_option(
+    ENABLE_HTTP
+    "Build HTTP support (requires civetweb)"
+    ON
+    "Include HTTP support in build")
 ################################################################################
 
 nano_project_load_connextdds()
@@ -89,6 +94,18 @@ if(NOT TARGET RTIConnextDDS::ddsagent)
 endif()
 
 ################################################################################
+# Load/build civetweb
+################################################################################
+function(build_civetweb)
+  set(CIVETWEB_BUILD_TESTING OFF)
+  set(CIVETWEB_ENABLE_SERVER_EXECUTABLE ON)
+  set(CIVETWEB_INSTALL_EXECUTABLE ON)
+  set(CIVETWEB_C_STANDARD c99)
+  add_subdirectory(third-party/civetweb)
+endfunction()
+
+build_civetweb()
+################################################################################
 # "agent" component
 ################################################################################
 
@@ -117,7 +134,8 @@ set(NANO_AGENT_SOURCE_FILES
         src/service/AgentTransportSerial.c
         src/service/AgentTransportUdpv4.c
         src/service/ProxyClient.c
-        src/service/MessageBufferPool.c)
+        src/service/MessageBufferPool.c
+        src/http/HttpService.c)
 
 set(NANO_AGENT_DEFINES          -DNANO_FEAT_AGENT=1)
 
@@ -128,9 +146,24 @@ set(NANO_AGENT_LIBS             nano::nanocoreagent
 
 set(NANO_AGENT_LIBRARY          agent)
 
+set(extra_install)
+if(${PROJECT_NAME}_ENABLE_HTTP)
+    # find_package(civetweb REQUIRED)
+    list(APPEND NANO_AGENT_SOURCE_FILES
+        src/http/HttpService.c
+    )
+    list(APPEND NANO_AGENT_INCLUDE_FILES_PUBLIC 
+        include/nano/nano_agent_http.h
+    )
+    list(APPEND NANO_AGENT_LIBS
+        civetweb-c-library
+    )
+    list(APPEND extra_install civetweb-c-library)
+endif()
+
 nano_component(NANO_AGENT)
 nano_component_library(NANO_AGENT)
-nano_component_install(NANO_AGENT)
+nano_component_install(NANO_AGENT ${extra_install})
 
 unset(NANO_AGENT_INCLUDE_FILES_PUBLIC)
 

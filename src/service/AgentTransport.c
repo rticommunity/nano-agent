@@ -37,6 +37,7 @@ NANO_XRCE_ProxyClientTransport_initialize(
     NANO_PCOND(listener != NULL)
     NANO_PCOND(properties != NULL)
 
+    self->base.mtu = props->base.mtu;
     self->base.listener = *listener;
     self->key = props->key;
     self->id = props->id;

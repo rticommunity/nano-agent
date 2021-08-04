@@ -17,6 +17,7 @@
  ******************************************************************************/
 
 #include "NddsXmlResource.h"
+#include "ServiceXml.h"
 
 #if DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT
 
@@ -449,6 +450,97 @@ NDDSA_RefResource_lookup_type(
     UNUSED_ARG(id);
     UNUSED_ARG(exists_out);
     retcode = RTI_TRUE;
+    return retcode;
+}
+
+
+RTIBool
+NDDSA_RefResource_lookup_service(
+    const D2S2_ResourceId *const id,
+    void **const resource_data_out)
+{
+    RTIBool retcode = RTI_FALSE;
+    DDS_DomainParticipantFactory *factory = NULL;
+    struct DDS_XMLObject *xml_root = NULL,
+                         *xml_svc = NULL;
+    NDDSA_ServiceXml *svc_xml = NULL;
+
+    if (id->kind != D2S2_RESOURCEIDKIND_REF)
+    {
+        /* unsupported id */
+        goto done;
+    }
+
+    factory = DDS_DomainParticipantFactory_get_instance();
+    if (factory == NULL)
+    {
+        /* TODO log */
+        goto done;
+    }
+    DDS_DomainParticipantFactory_lockI(factory);
+
+    xml_root = DDS_DomainParticipantFactory_get_xml_rootI(factory);
+
+    DDS_DomainParticipantFactory_unlockI(factory);
+    if (xml_root == NULL)
+    {
+        goto done;
+    }
+
+    xml_svc = DDS_XMLObject_lookup(xml_root, id->value.ref);
+    if (NULL != xml_svc)
+    {
+        svc_xml = (NDDSA_ServiceXml*)xml_svc;
+        *resource_data_out = &svc_xml->entity;
+    }
+
+    retcode = RTI_TRUE;
+done:
+    return retcode;
+}
+
+RTIBool
+NDDSA_RefResource_lookup_service_resource(
+    const D2S2_ResourceId *const id,
+    void **const resource_data_out)
+{
+    RTIBool retcode = RTI_FALSE;
+    DDS_DomainParticipantFactory *factory = NULL;
+    struct DDS_XMLObject *xml_root = NULL,
+                         *xml_svc_res = NULL;
+    NDDSA_ServiceResourceXml *res_xml = NULL;
+
+    if (id->kind != D2S2_RESOURCEIDKIND_REF)
+    {
+        /* unsupported id */
+        goto done;
+    }
+
+    factory = DDS_DomainParticipantFactory_get_instance();
+    if (factory == NULL)
+    {
+        /* TODO log */
+        goto done;
+    }
+    DDS_DomainParticipantFactory_lockI(factory);
+
+    xml_root = DDS_DomainParticipantFactory_get_xml_rootI(factory);
+
+    DDS_DomainParticipantFactory_unlockI(factory);
+    if (xml_root == NULL)
+    {
+        goto done;
+    }
+
+    xml_svc_res = DDS_XMLObject_lookup(xml_root, id->value.ref);
+    if (NULL != xml_svc_res)
+    {
+        res_xml = (NDDSA_ServiceResourceXml*)xml_svc_res;
+        *resource_data_out = &res_xml->entity;
+    }
+
+    retcode = RTI_TRUE;
+done:
     return retcode;
 }
 

@@ -17,6 +17,7 @@
  ******************************************************************************/
 
 #include "AgentDaemon.h"
+#include "nano/nano_agent_http.h"
 
 NANO_AgentDaemon NANO_AgentDaemon_g_self = NANO_AGENTDAEMON_INITIALIZER;
 
@@ -126,6 +127,8 @@ NANO_AgentDaemon_print_help(const char *arg0)
            "      and exit.\n\n"
            "   " NANO_AGENT_ARGS_HELP_STR_P(HEARTBEATPERIOD,"PERIOD") "\n\n"
            "      Interval in millisecond for periodic heartbeat messages.\n\n"
+           "   " NANO_AGENT_ARGS_HELP_STR(HTTP) "\n\n"
+           "      Enable support for making HTTP requests.\n\n"
            "   " NANO_AGENT_ARGS_HELP_STR_P(KIND,"RESOURCE-KIND") "\n\n"
            "      The type of resource for which an id is to be generated. One of:\n\n"
            "        - domainparticipant [dp]\n"
@@ -175,7 +178,8 @@ NANO_AgentDaemon_initialize_xrce(NANO_AgentDaemon *const self)
     NANO_XRCE_SerialAgentTransportProperties transport_serial_props =
         NANO_XRCE_SERIALAGENTTRANSPORTPROPERTIES_INITIALIZER;
     NANO_XRCE_AgentProperties props = NANO_XRCE_AGENTPROPERTIES_INITIALIZER;
-    
+    D2S2_ExternalServicePlugin *http_plugin = NULL;
+
     NANO_LOG_FN_ENTRY
     
     NANO_PCOND(self != NULL)
@@ -337,6 +341,21 @@ NANO_AgentDaemon_initialize_xrce(NANO_AgentDaemon *const self)
                 self->server, NANO_XRCE_Agent_as_interface(self->agent)))
     {
         goto done;
+    }
+
+    if (self->args.http_enable)
+    {
+        http_plugin = NANO_HttpPlugin_new();
+        if (NULL == http_plugin)
+        {
+            goto done;
+        }
+        if (DDS_RETCODE_OK !=
+            D2S2_Agent_register_external_service_plugin(
+              self->server, http_plugin))
+        {
+            goto done;
+        }
     }
     
     rc = NANO_RETCODE_OK;
@@ -510,6 +529,10 @@ NANO_AgentDaemon_initialize(
         goto done;
     }
 
+    NANO_CHECK_RC(
+        NANO_AgentDaemon_initialize_xrce(self),
+        NANO_LOG_ERROR_MSG("FAILED to initialize XRCE service"));
+
     if (self->args.config_file_path != NULL)
     {
         if (DDS_RETCODE_OK !=
@@ -519,11 +542,6 @@ NANO_AgentDaemon_initialize(
             goto done;
         }
     }
-
-    NANO_CHECK_RC(
-        NANO_AgentDaemon_initialize_xrce(self),
-        NANO_LOG_ERROR_MSG("FAILED to initialize XRCE service"));
-    
 
     if (DDS_RETCODE_OK != D2S2_Agent_start(self->server))
     {
@@ -801,6 +819,16 @@ NANO_AgentDaemon_parse_args(
                 strcmp("datareader",user_str) == 0)
             {
                 self->args.gen_resource_kind = D2S2_RESOURCEKIND_DATAREADER;
+            }
+            else if (strcmp("extsvc",user_str) == 0 ||
+                strcmp("external_service",user_str) == 0)
+            {
+                self->args.gen_resource_kind = D2S2_RESOURCEKIND_SERVICE;
+            }
+            else if (strcmp("svcres",user_str) == 0 ||
+                strcmp("service_resource",user_str) == 0)
+            {
+                self->args.gen_resource_kind = D2S2_RESOURCEKIND_SERVICE_RESOURCE;
             }
             else
             {
@@ -1086,6 +1114,10 @@ NANO_AgentDaemon_parse_args(
         else if (NANO_AGENT_MATCH_ARG(user_str,HELP))
         {
             self->args.show_help = NANO_BOOL_TRUE;
+        }
+        else if (NANO_AGENT_MATCH_ARG(user_str,HTTP))
+        {
+            self->args.http_enable = NANO_BOOL_TRUE;
         }
         else
         {

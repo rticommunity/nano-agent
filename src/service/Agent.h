@@ -82,7 +82,7 @@ typedef struct NANODllExport NANO_XRCE_ReaderStateI
     NANO_bool forward;
 } NANO_XRCE_ReaderState;
 
-#define NANO_XRCE_READREQUEST_INITIALIZER \
+#define NANO_XRCE_READERSTATE_INITIALIZER \
 {\
     NULL, /* req */\
     NANO_XRCE_FORMAT_INVALID, /* read_fmt */\
@@ -98,7 +98,28 @@ NANO_XRCE_ReaderState_needs_reply(NANO_XRCE_ReaderState *const self);
 #define NANO_XRCE_ReaderState_needs_reply(s_) \
     NANO_XRCE_SubmessageFlags_READDATA_confirm((s_)->base.submsg_hdr.flags)
 
+typedef struct NANODllExport NANO_XRCE_ServiceRequestStateI
+{
+    NANO_XRCE_ProxyClientRequest *req;
+    NANO_XRCE_StreamId stream_id;
+    NANO_XRCE_ServiceRequestFlags request_flags;
+    NANO_XRCE_ServiceReplyStatus reply_flags;
+    D2S2_Buffer request_data;
+    D2S2_Buffer reply_data;
+} NANO_XRCE_ServiceRequestState;
 
+#define NANO_XRCE_SERVICEREQUESTSTATE_INITIALIZER \
+{\
+    NULL, /* req */\
+    NANO_XRCE_STREAMID_NONE, /* stream_id */\
+    NANO_XRCE_SERVICEREQUESTFLAGS_UNKNOWN, /* request_flags */\
+    NANO_XRCE_SERVICEREPLYSTATUS_UNKNOWN, /* reply_flags */\
+    D2S2_BUFFER_INITIALIZER, /* request_data */\
+    D2S2_BUFFER_INITIALIZER  /* reply_data */\
+}
+
+#define NANO_XRCE_ServiceRequestState_needs_reply(s_) \
+    NANO_XRCE_SubmessageFlags_SERVICEREQUEST_confirm((s_)->base.submsg_hdr.flags)
 
 typedef struct NANODllExport NANO_XRCE_ForwardDataRequestI
 {
@@ -116,6 +137,19 @@ typedef struct NANODllExport NANO_XRCE_ForwardDataRequestI
     NANO_XRCE_OBJECTID_INVALID, /* reader_id */\
     NANO_XRCE_STREAMID_NONE, /* stream_id */\
     NANO_XRCE_SEQNUM_INITIALIZER, /* sn */\
+}
+
+typedef struct NANODllExport NANO_XRCE_ExternalServiceResourceStateI
+{
+    NANO_XRCE_ProxyClientRequest *req;
+    NANO_bool forward;
+} NANO_XRCE_ExternalServiceResourceState;
+
+
+#define NANO_XRCE_EXERNALSERVICERESOURCESTATE_INITIALIZER \
+{\
+    NULL, /* req */\
+    NANO_BOOL_FALSE /* forward */\
 }
 
 typedef struct NANODllExport NANO_XRCE_AgentTransportRecordI
@@ -163,6 +197,7 @@ struct NANO_XRCE_AgentI
     struct REDAFastBufferPool *clients_pool;
     struct REDAFastBufferPool *transports_pool;
     struct REDAFastBufferPool *reads_pool;
+    struct REDAFastBufferPool *service_requests_pool;
     struct REDAFastBufferPool *pool_storage_stream;
     struct REDAFastBufferPool *pool_storage_session;
     
@@ -181,6 +216,7 @@ extern const D2S2_AgentServerInterfaceApi NANO_XRCE_gv_AgentInterfaceApi;
     NULL, /* clients_pool */\
     NULL, /* transports_pool */\
     NULL, /* reads_pool */\
+    NULL, /* service_requests_pool */\
     NULL, /* pool_storage_stream */\
     NULL, /* pool_storage_session */\
     NANO_XRCE_AGENTFLAGS_DEFAULT, /* flags */\
@@ -264,6 +300,12 @@ NANO_XRCE_Agent_on_submsg_getinfo(
     NANO_XRCE_GetInfoPayload *const submsg);
 
 NANO_RetCode
+NANO_XRCE_Agent_on_submsg_servicereq(
+    NANO_XRCE_Agent *const self,
+    NANO_XRCE_ProxyClientRequest *const request,
+    NANO_XRCE_ServiceRequestPayload *const submsg);
+
+NANO_RetCode
 NANO_XRCE_Agent_delete_client_session(
     NANO_XRCE_Agent *const self,
     NANO_XRCE_ProxyClient *const client);
@@ -325,13 +367,32 @@ NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
     NANO_XRCE_Agent *const self,
     NANO_XRCE_ProxyClient *const client,
     NANO_XRCE_Stream *const req_stream,
-    const D2S2_AttachedResourceId reader_id);
+    const D2S2_AttachedResourceId reader_id,
+    const DDS_Boolean confirmed);
 
 NANO_RetCode
 NANO_XRCE_Agent_find_client_locator_mapping(
     NANO_XRCE_Agent *const self,
     const NANO_XRCE_TransportLocator *const locator,
     NANO_XRCE_ClientLocatorMapping **const mapping_out);
+
+NANO_RetCode
+NANO_XRCE_Agent_allocate_reply_message(
+    NANO_XRCE_Agent *const self,
+    NANO_XRCE_ProxyClient *const client,
+    NANO_XRCE_Stream *reply_stream,
+    const NANO_XRCE_StreamId reply_stream_id,
+    const NANO_usize payload_size,
+    const NANO_u8 *const user_payload,
+    NANO_MessageBuffer **const payload_out,
+    NANO_XRCE_Stream **const reply_stream_out);
+
+void
+NANO_XRCE_Agent_release_reply_message(
+    NANO_XRCE_Agent *const self,
+    NANO_XRCE_ProxyClient *const client,
+    const NANO_XRCE_StreamId reply_stream_id,
+    NANO_MessageBuffer *const payload);
 
 #define NANO_XRCE_RepresentationFormat_to_dds(s_) \
     (((s_) == NANO_XRCE_REPRESENTATION_AS_XML_STRING)?\

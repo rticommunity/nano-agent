@@ -17,6 +17,7 @@
  ******************************************************************************/
 
 #include "NddsXmlVisitor.h"
+#include "ServiceXml.h"
 
 typedef RTIBool
 (*NDDSA_Agent_VisitXmlFn)(
@@ -265,6 +266,65 @@ done:
     return retcode;
 }
 
+RTI_PRIVATE
+RTIBool
+NDDSA_Agent_visit_xml_service_resource(
+    NDDSA_Agent *const self,
+    NDDSA_XmlVisitor *const visitor,
+    struct DDS_XMLObject *const service_resource)
+{
+    D2S2Log_METHOD_NAME(NDDSA_Agent_visit_xml_service_resource)
+    RTIBool retcode = RTI_FALSE;
+
+    D2S2Log_fn_entry()
+
+    if (!NDDSA_XmlVisitor_on_service_resource(visitor, self, service_resource))
+    {
+        goto done;
+    }
+
+    retcode = RTI_TRUE;
+    
+done:
+
+    D2S2Log_fn_exit()
+    return retcode;
+}
+
+RTI_PRIVATE
+RTIBool
+NDDSA_Agent_visit_xml_service(
+    NDDSA_Agent *const self,
+    NDDSA_XmlVisitor *const visitor,
+    struct DDS_XMLObject *const service)
+{
+    D2S2Log_METHOD_NAME(NDDSA_Agent_visit_xml_service)
+    RTIBool retcode = RTI_FALSE;
+
+    D2S2Log_fn_entry()
+
+    if (!NDDSA_XmlVisitor_on_service(visitor, self, service))
+    {
+        goto done;
+    }
+
+    if (!NDDSA_Agent_visit_xml_children(
+            self,
+            visitor,
+            service,
+            NDDSA_SERVICE_RESOURCE_XML_TAG,
+            NDDSA_Agent_visit_xml_service_resource))
+    {
+        goto done;
+    }
+
+    retcode = RTI_TRUE;
+    
+done:
+    D2S2Log_fn_exit()
+    return retcode;
+}
+
 RTIBool
 NDDSA_Agent_visit_xml(
     NDDSA_Agent *const self,
@@ -298,6 +358,14 @@ NDDSA_Agent_visit_xml(
         goto done;
     }
     
+    if (!NDDSA_Agent_visit_xml_children(
+            self, visitor, xml_root, 
+            NDDSA_SERVICE_XML_TAG,
+            NDDSA_Agent_visit_xml_service))
+    {
+        goto done;
+    }
+
     retcode = RTI_TRUE;
     
 done:

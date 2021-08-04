@@ -67,7 +67,9 @@ set(DDS_AGENT_INCLUDE_FILES_PRIVATE
         src/impl_ndds/NddsResourceNative.h
         src/impl_ndds/NddsResource.h
         src/impl_ndds/NddsWriter.h
-        src/impl_ndds/NddsXmlResource.h)
+        src/impl_ndds/NddsXmlResource.h
+        src/impl_ndds/ServiceXml.h
+        src/impl_ndds/NddsExternalService.h)
 
 set(DDS_AGENT_SOURCE_FILES
         src/log/Log.c
@@ -86,7 +88,8 @@ set(DDS_AGENT_SOURCE_FILES
         src/impl_ndds/NddsResourceFactory.c
         src/impl_ndds/NddsResourceNative.c
         src/impl_ndds/NddsWriter.c
-        src/impl_ndds/NddsXmlResource.c)
+        src/impl_ndds/NddsXmlResource.c
+        src/impl_ndds/ServiceXml.c)
 
 set(DDS_AGENT_LIBS          RTIConnextDDS::c_api)
 

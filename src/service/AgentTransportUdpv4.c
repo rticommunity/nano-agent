@@ -127,7 +127,11 @@ NANO_XRCE_Udpv4AgentTransport_recv_thread_impl(
                     msg,
                     &msg_len);
 
-        if (NANO_RETCODE_OK == rc)
+        if (!self->active)
+        {
+            continue;
+        }
+        else if (NANO_RETCODE_OK == rc)
         {
             if ((msg_len >= NANO_XRCE_MESSAGE_SERIALIZED_SIZE_MIN))
             {

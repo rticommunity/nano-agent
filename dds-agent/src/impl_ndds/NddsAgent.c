@@ -21,7 +21,6 @@
 #include "clock/clock_monotonic.h"
 #include "clock/clock_system.h"
 
-
 #if DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT
 
 /******************************************************************************
@@ -182,6 +181,16 @@ NDDSA_Agent_on_cleanup_reads(
     void *handler_data,
     DDS_Condition *condition);
 
+RTI_PRIVATE
+RTIBool
+NDDSA_Agent_on_external_service_reply_available(
+    const struct RTIEventGeneratorListener *me,
+    struct RTINtpTime *newTime, struct RTINtpTime *newSnooze,
+    const struct RTINtpTime *now, const struct RTINtpTime *time,
+    const struct RTINtpTime *snooze,
+    const struct RTIEventGeneratorListenerStorage *listenerStorage,
+    struct REDAWorker *worker);
+
 /******************************************************************************
  *                      Public function implementations
  ******************************************************************************/
@@ -302,6 +311,27 @@ NDDSA_Agent_initialize(
         REDAFastBufferPool_newForStructure(
             NDDSA_ClientSessionEvent, &pool_props);
     if (self->pool_events_session == NULL)
+    {
+        goto done;
+    }
+
+    self->pool_service_requests = 
+        REDAFastBufferPool_newForStructure(NDDSA_ExternalServiceRequest, &pool_props);
+    if (self->pool_service_requests == NULL)
+    {
+        goto done;
+    }
+
+    self->pool_service_replies = 
+        REDAFastBufferPool_newForStructure(NDDSA_ExternalServiceReply, &pool_props);
+    if (self->pool_service_replies == NULL)
+    {
+        goto done;
+    }
+
+    self->pool_service_pending_requests = 
+        REDAFastBufferPool_newForStructure(NDDSA_ExternalServicePendingRequest, &pool_props);
+    if (self->pool_service_pending_requests == NULL)
     {
         goto done;
     }
@@ -587,6 +617,12 @@ NDDSA_Agent_finalize(NDDSA_Agent *const self)
     self->pool_resources = NULL;
     REDAFastBufferPool_delete(self->pool_events_session);
     self->pool_events_session = NULL;
+    REDAFastBufferPool_delete(self->pool_service_requests);
+    self->pool_service_requests = NULL;
+    REDAFastBufferPool_delete(self->pool_service_replies);
+    self->pool_service_replies = NULL;
+    REDAFastBufferPool_delete(self->pool_service_pending_requests);
+    self->pool_service_pending_requests = NULL;
 
     NDDSA_ResourceFactory_finalize(&self->res_factory);
 
@@ -1636,6 +1672,16 @@ NDDSA_Agent_enable_resourceEA(
         }
         break;
     }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        /* TODO implement me */
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        /* TODO implement me */
+        break;
+    }
     default:
         break;
     }
@@ -1696,6 +1742,7 @@ NDDSA_Agent_create_resourceEA(
     case D2S2_RESOURCEKIND_DOMAIN:
     case D2S2_RESOURCEKIND_TYPE:
     case D2S2_RESOURCEKIND_DOMAINPARTICIPANT:
+    case D2S2_RESOURCEKIND_SERVICE:
     {
         /* these types of resources don't have a parent */
         if (parent_id != D2S2_ATTACHEDRESOURCEID_INVALID)
@@ -1713,6 +1760,7 @@ NDDSA_Agent_create_resourceEA(
     case D2S2_RESOURCEKIND_SUBSCRIBER:
     case D2S2_RESOURCEKIND_DATAWRITER:
     case D2S2_RESOURCEKIND_DATAREADER:
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
     {
         /* NON-STANDARD: Allow clients to create an entity by specifying 
            a full reference and an invalid parent_id */
@@ -1822,6 +1870,19 @@ NDDSA_Agent_create_resourceEA(
                     &RTI_LOG_ANY_FAILURE_ss,
                     D2S2_LOG_MSG_AGENT_INVALID_RESOURCE_KIND,
                     "parent");
+                goto done;
+            }
+            break;
+        }
+        case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+        {
+            if (attached_parent->base.kind != D2S2_RESOURCEKIND_SERVICE)
+            {
+                D2S2Log_exception(
+                    method_name,
+                    &RTI_LOG_ANY_FAILURE_ss,
+                    D2S2_LOG_MSG_AGENT_INVALID_RESOURCE_KIND,
+                    "parent service");
                 goto done;
             }
             break;
@@ -2756,7 +2817,7 @@ NDDSA_Agent_finalize_database_sessions(NDDSA_Agent *const self)
     sessions_locked = RTI_TRUE;
 
     if (!NDDSA_AgentDb_find_next_session_and_delete_previous(
-            &self->db, NULL, NULL, NULL, &session_rec))
+            &self->db, /*NULL,*/ NULL, NULL, &session_rec))
     {
         D2S2Log_exception(
             method_name,
@@ -2804,7 +2865,7 @@ NDDSA_Agent_finalize_database_sessions(NDDSA_Agent *const self)
 
         session_rec = NULL;
         if (!NDDSA_AgentDb_find_next_session_and_delete_previous(
-                &self->db, NULL, NULL, prev_session_rec, &session_rec))
+                &self->db, /*NULL,*/ NULL, prev_session_rec, &session_rec))
         {
             D2S2Log_exception(
                 method_name,
@@ -2896,6 +2957,7 @@ NDDSA_Agent_finalize_database_resources(NDDSA_Agent *const self)
         if (DDS_RETCODE_OK !=
                 NDDSA_Agent_delete_native_resourceEA(self, &resource_id))
         {
+            printf("******* FAILED NDDSA_Agent_delete_native_resourceEA\n");
             goto done;
         }
 
@@ -3019,8 +3081,10 @@ NDDSA_Agent_finalize_sessionEA(
         
         node = REDAInlineListNode_getNext(&attached->node);
 
-        if (attached->base.kind != D2S2_RESOURCEKIND_DATAREADER ||
-            attached->read_req == NULL)
+        if (!((attached->base.kind == D2S2_RESOURCEKIND_DATAREADER &&
+              attached->read_req == NULL) ||
+              (attached->base.kind == D2S2_RESOURCEKIND_SERVICE_RESOURCE &&
+                attached->svc_req == NULL)))
         {
             continue;
         }
@@ -3061,20 +3125,23 @@ NDDSA_Agent_finalize_sessionEA(
             continue;
         }
 
-        if (DDS_RETCODE_OK !=
-                NDDSA_Agent_cancel_readEA(
-                    self,
-                    session_rec,
-                    attached,
-                    RTI_FALSE /* locked_resources */,
-                    resource_rec,
-                    NULL))
+        if (attached->base.kind == D2S2_RESOURCEKIND_DATAREADER)
         {
-            D2S2Log_exception(
-                method_name,
-                &RTI_LOG_ANY_FAILURE_s,
-                "FAILED to cancel read on close session");
-            goto done;
+            if (DDS_RETCODE_OK !=
+                    NDDSA_Agent_cancel_readEA(
+                        self,
+                        session_rec,
+                        attached,
+                        RTI_FALSE /* locked_resources */,
+                        resource_rec,
+                        NULL))
+            {
+                D2S2Log_exception(
+                    method_name,
+                    &RTI_LOG_ANY_FAILURE_s,
+                    "FAILED to cancel read on close session");
+                goto done;
+            }
         }
 
         if (!NDDSA_AgentDb_release_resource(&self->db, resource_rec))
@@ -3088,13 +3155,26 @@ NDDSA_Agent_finalize_sessionEA(
         }
         resource_rec = NULL;
 
-        D2S2_AgentServerInterface_on_read_complete(
-            src,
-            &self->base,
-            &session_rec->session.base,
-            session_rec->session.user_data,
-            attached->base.id,
-            attached->user_data);
+        if (attached->base.kind == D2S2_RESOURCEKIND_DATAREADER)
+        {
+            D2S2_AgentServerInterface_on_read_complete(
+                src,
+                &self->base,
+                &session_rec->session.base,
+                session_rec->session.user_data,
+                attached->base.id,
+                attached->user_data);
+        }
+        else
+        {
+            D2S2_AgentServerInterface_on_release_service_replies(
+                src,
+                &self->base,
+                &session_rec->session.base,
+                session_rec->session.user_data,
+                attached->base.id,
+                attached->user_data);
+        }
 
     }
 
@@ -3351,12 +3431,25 @@ NDDSA_Agent_find_resource_by_native_resource(
                 param->native_entity.topic);
         break;
     }
-
     case D2S2_RESOURCEKIND_DOMAINPARTICIPANT:
     {
         compatible =
             (resource_rec->resource.native.value.entity.participant ==
                 param->native_entity.participant);
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        compatible =
+            (resource_rec->resource.native.value.entity.service ==
+                param->native_entity.service);
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        compatible =
+            (resource_rec->resource.native.value.entity.service_resource ==
+                param->native_entity.service_resource);
         break;
     }
     default:
@@ -3848,6 +3941,12 @@ NDDSA_Agent_delete_native_resource_entityEA(
         }
         break;
     }
+    case D2S2_RESOURCEKIND_SERVICE:
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        /* Nothing to do but deleting the XML */
+        break;
+    }
     default:
         break;
     }
@@ -3920,7 +4019,10 @@ NDDSA_Agent_delete_native_resourceEA(
     case D2S2_RESOURCEKIND_SUBSCRIBER:
     case D2S2_RESOURCEKIND_DATAREADER:
     case D2S2_RESOURCEKIND_DATAWRITER:
+    case D2S2_RESOURCEKIND_SERVICE:
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
     {
+        /* nothing to do yet */
         break;
     }
     case D2S2_RESOURCEKIND_DOMAIN:
@@ -4013,6 +4115,41 @@ NDDSA_Agent_delete_native_resourceEA(
             (NDDSA_Writer*)resource_rec->resource.user_data;
         NDDSA_Writer_finalize(writer_data);
         REDAFastBufferPool_returnBuffer(self->pool_writers, writer_data);
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        NDDSA_ExternalService *svc = NULL;
+        NDDSA_ExternalServiceResource *svc_res = NULL;
+
+        if (native_entity_exists)
+        {
+            svc = resource_rec->resource.native.value.entity.service;
+            svc_res = (NDDSA_ExternalServiceResource*)
+                REDAInlineList_getFirst(&svc->resources);
+            while (svc_res)
+            {
+                if (DDS_RETCODE_OK !=
+                      D2S2_ExternalServicePlugin_delete_resource(svc->plugin, svc_res->data))
+                {
+                    goto done;
+                }
+                svc_res = (NDDSA_ExternalServiceResource*)
+                  REDAInlineListNode_getNext(&svc_res->node);
+            }
+
+            if (DDS_RETCODE_OK !=
+                  D2S2_ExternalServicePlugin_delete_service(svc->plugin, svc->data))
+            {
+                goto done;
+            }
+        }
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        /* Resources are deleted with their service */
+        native_entity_exists = RTI_FALSE;
         break;
     }
     default:
@@ -4735,6 +4872,35 @@ done:
     return retcode;
 }
 
+RTI_PRIVATE
+D2S2_ExternalServicePlugin*
+NDDSA_AGENT_find_service_plugin_by_name(
+    NDDSA_Agent *const self,
+    const char * const proto)
+{
+    D2S2_ExternalServicePlugin *svc_plugin = NULL;
+
+    /* Lookup service plugin */
+    svc_plugin = (D2S2_ExternalServicePlugin*)
+        REDAInlineList_getFirst(&self->service_plugins);
+    while (NULL != svc_plugin)
+    {
+        size_t i = 0;
+        const char * plugin_proto = NULL;
+        for (i = 0, plugin_proto = svc_plugin->supported_protocols[0];
+                NULL != plugin_proto;
+                    ++i,
+                    plugin_proto = svc_plugin->supported_protocols[i])
+        {
+            if (strcmp(plugin_proto, proto) == 0)
+            {
+                return svc_plugin;
+            }
+        }
+    }
+    return NULL;
+}
+
 DDS_ReturnCode_t
 NDDSA_Agent_insert_resource_recordEA(
     NDDSA_Agent *const self,
@@ -4851,6 +5017,8 @@ NDDSA_Agent_insert_resource_recordEA(
         case D2S2_RESOURCEKIND_SUBSCRIBER:
         case D2S2_RESOURCEKIND_DATAWRITER:
         case D2S2_RESOURCEKIND_DATAREADER:
+        case D2S2_RESOURCEKIND_SERVICE:
+        case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
         {
             /* Lookup the associated DDS entity */
             if (!NDDSA_ResourceFactory_lookup_entity_resource(
@@ -4989,6 +5157,48 @@ NDDSA_Agent_insert_resource_recordEA(
             writer_data->agent = self;
             writer_data->user_data = NULL;
             resource_rec->resource.user_data = writer_data;
+        }
+        else if (resource_kind == D2S2_RESOURCEKIND_SERVICE)
+        {
+            NDDSA_ExternalService *svc = native_entity.service;
+
+            /* Lookup service plugin */
+            svc->plugin =
+                NDDSA_AGENT_find_service_plugin_by_name(self, svc->plugin_name);
+            if (NULL == svc->plugin)
+            {
+                D2S2Log_exception(method_name, &RTI_LOG_ANY_s, "unknown service plugin");
+                goto done;
+            }
+
+            if (DDS_RETCODE_OK !=
+                  D2S2_ExternalServicePlugin_create_service(
+                      svc->plugin,
+                      &self->base,
+                      &svc->id,
+                      svc->url,
+                      svc->descriptor,
+                      &svc->data))
+            {
+                /* TODO log */
+                goto done;
+            }
+        }
+        else if (resource_kind == D2S2_RESOURCEKIND_SERVICE_RESOURCE)
+        {
+            NDDSA_ExternalServiceResource *svc_res = native_entity.service_resource;
+            if (DDS_RETCODE_OK !=
+                  D2S2_ExternalServicePlugin_create_resource(
+                      svc_res->service->plugin,
+                      svc_res->service->data,
+                      &svc_res->id,
+                      svc_res->path,
+                      svc_res->descriptor,
+                      &svc_res->data))
+            {
+                /* TODO log */
+                goto done;
+            }
         }
 
 #if 0
@@ -5531,6 +5741,537 @@ done:
     return;
 }
 
+RTI_PRIVATE
+void
+NDDSA_Agent_dismiss_request_from_external_service_resourceEA(
+    NDDSA_Agent *const self,
+    NDDSA_ResourceRecord *const resource_rec,
+    NDDSA_AttachedResource *const attached)
+{
+    struct REDAInlineListNode *req_node = NULL;
+    NDDSA_ExternalServicePendingRequest *pending_req = NULL;
+    NDDSA_ExternalServiceResource *const svc_res =
+        resource_rec->resource.native.value.entity.service_resource;
 
+    pending_req = (NDDSA_ExternalServicePendingRequest*)
+        REDAInlineList_getFirst(&svc_res->requests);
+    while (NULL != pending_req)
+    {
+        if (pending_req->request == attached->svc_req)
+        {
+            REDAInlineList_removeNodeEA(&svc_res->requests, &pending_req->node);
+            REDAFastBufferPool_returnBuffer(
+              self->pool_service_pending_requests, pending_req);
+            return;
+        }
+        pending_req = (NDDSA_ExternalServicePendingRequest*)
+            REDAInlineListNode_getNext(&pending_req->node);
+    }
+}
+
+DDS_ReturnCode_t
+NDDSA_Agent_cancel_external_service_requestEA(
+    NDDSA_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    NDDSA_ClientSessionRecord *const session_rec,
+    NDDSA_ResourceRecord *const resource_rec,
+    NDDSA_AttachedResource *const attached)
+{
+    DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
+    NDDSA_ExternalServiceReply *reply = NULL;
+    struct REDAInlineListNode *reply_node = NULL;
+    NDDSA_ExternalServicePendingRequest *pending_req = NULL;
+    NDDSA_ExternalServiceResource *const svc_res =
+        resource_rec->resource.native.value.entity.service_resource;
+    const struct RTINtpTime ts_zero = RTI_NTP_TIME_ZERO;
+
+    if (NULL == attached->svc_req)
+    {
+        /* nothing to do */
+        retcode = DDS_RETCODE_OK;
+        goto done;
+    }
+
+    reply_node = REDAInlineList_getFirst(&attached->svc_req->replies);
+    while (NULL != reply_node)
+    {
+        reply = NDDSA_ExternalServiceReply_from_node(reply_node);
+        if (DDS_RETCODE_OK !=
+            D2S2_ExternalServicePlugin_return_reply(
+                svc_res->service->plugin,
+                svc_res->data,
+                reply->reply))
+        {
+            /* TODO log */
+            goto done;
+        }
+        reply_node = REDAInlineListNode_getNext(reply_node);
+        REDAInlineList_removeNodeEA(&attached->svc_req->replies, &reply->node);
+        REDAFastBufferPool_returnBuffer(self->pool_service_replies, reply);
+    }
+
+    NDDSA_Agent_dismiss_request_from_external_service_resourceEA(
+        self, resource_rec, attached);
+    /* Make sure that there is not reply notification pending */
+    attached->svc_req->listener_storage.field[1] = NULL;
+    attached->svc_req->listener_storage.field[2] = attached->svc_req->sem_cancelled;
+    if (!NDDSA_Agent_post_event(
+            self,
+            &attached->svc_req->listener,
+            &attached->svc_req->listener_storage,
+            sizeof(NDDSA_ExternalServiceRequest*),
+            &ts_zero))
+    {
+        /* TODO log */
+        goto done;
+    }
+    if (!NDDSA_Agent_wait_for_semaphoreEA(
+            self,
+            RTI_FALSE /* locked_sessions */,
+            session_rec,
+            RTI_FALSE /* locked_resources */,
+            resource_rec,
+            attached->svc_req->sem_cancelled))
+    {
+        /* TODO log */
+        goto done;
+    }
+    RTIOsapiSemaphore_delete(attached->svc_req->sem_cancelled);
+    REDAFastBufferPool_returnBuffer(self->pool_service_requests, attached->svc_req);
+    attached->svc_req = NULL;
+    
+    retcode = DDS_RETCODE_OK;
+    
+done:
+    if (DDS_RETCODE_OK != retcode)
+    {
+        /* handle failure */
+    }
+    return retcode;
+}
+
+RTI_PRIVATE
+DDS_ReturnCode_t
+NDDSA_Agent_take_external_service_replyEA(
+    NDDSA_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    NDDSA_ClientSessionRecord *const session_rec,
+    NDDSA_ResourceRecord *const resource_rec,
+    NDDSA_AttachedResource *const attached,
+    const D2S2_ExternalServiceRequestToken request_token,
+    NDDSA_ExternalServiceReply **const reply_out)
+{
+    static const NDDSA_ExternalServiceReply def_reply = 
+        NDDSA_EXTERNALSERVICEREPLY_INITIALIZER;
+    DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
+    NDDSA_ExternalServiceReply *reply = NULL;
+    D2S2_ExternalServiceReply *svc_reply = NULL;
+    NDDSA_ExternalServiceResource *const svc_res =
+        resource_rec->resource.native.value.entity.service_resource;
+
+    if (DDS_RETCODE_OK !=
+        D2S2_ExternalServicePlugin_take_reply(
+            svc_res->service->plugin,
+            svc_res->data,
+            request_token,
+            &svc_reply))
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    if (NULL == svc_reply)
+    {
+        retcode = DDS_RETCODE_OK;
+        goto done;
+    }
+
+    reply = (NDDSA_ExternalServiceReply*)
+        REDAFastBufferPool_getBuffer(self->pool_service_replies);
+    if (NULL == reply)
+    {
+        /* TODO log */
+        goto done;
+    }
+    *reply = def_reply;
+    reply->base.session_key = session_rec->session.base.key;
+    reply->base.reader_id = attached->base.id;
+    reply->base.data = &reply->data_repr;
+    reply->session = &session_rec->session;
+    reply->reply = svc_reply;
+    reply->data_repr.fmt = D2S2_DATAREPRESENTATIONFORMAT_XCDR;
+    reply->data_repr.value.xcdr.encoding = D2S2_XCDRENCODINGKIND_UNKNOWN;
+    reply->data_repr.value.xcdr.little_endian = DDS_BOOLEAN_TRUE;
+    reply->data_repr.value.xcdr.buffer = svc_reply->data;
+
+    *reply_out = reply;
+    
+    retcode = DDS_RETCODE_OK;
+    
+done:
+    if (DDS_RETCODE_OK != retcode)
+    {
+        if (NULL != svc_reply)
+        {
+            if (DDS_RETCODE_OK !=
+              D2S2_ExternalServicePlugin_return_reply(
+                  svc_res->service->plugin,
+                  svc_res->data,
+                  svc_reply))
+          {
+              /* TODO log */
+              goto done;
+          }
+        }
+    }
+    return retcode;
+}
+
+DDS_ReturnCode_t
+NDDSA_Agent_make_external_service_requestEA(
+    NDDSA_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    NDDSA_ClientSessionRecord *const session_rec,
+    NDDSA_AttachedResource *const attached,
+    const DDS_UnsignedLong svc_flags,
+    const D2S2_Buffer * const svc_query,
+    const D2S2_Buffer * const svc_data,
+    const D2S2_Buffer * const svc_metadata,
+    const DDS_Boolean no_reply)
+{
+    D2S2Log_METHOD_NAME(NDDSA_Agent_make_external_service_requestEA)
+    static const NDDSA_ExternalServiceRequest def_req =
+        NDDSA_EXTERNALSERVICEREQUEST_INITIALIZER;
+    static const NDDSA_ExternalServicePendingRequest def_pending_req =
+        NDDSA_EXTERNALSERVICEPENDINGREQUEST_INITIALIZER;
+    DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
+    RTIBool req_complete = RTI_FALSE;
+    NDDSA_ExternalServiceReply *reply = NULL;
+    D2S2_ExternalServiceRequestToken req_token =
+        D2S2_EXTERNALSERVICEREQUESTTOKEN_UNKNOWN;
+    NDDSA_ExternalServiceRequest *req = NULL;
+    NDDSA_ExternalServicePendingRequest *pending_req = NULL;
+    NDDSA_ExternalServiceResource *svc_res = NULL;
+    NDDSA_ResourceRecord *resource_rec = NULL;
+
+    if (!NDDSA_AgentDb_lookup_resource(
+            &self->db, &attached->base.resource, &resource_rec))
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            D2S2_LOG_MSG_DB_LOOKUP_RESOURCE_FAILED);
+        goto done;
+    }
+    if (resource_rec == NULL)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "UNKNOWN resource");
+        goto done;
+    }
+    if (resource_rec->resource.native_deleted)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "native resource ALREADY DELETED");
+        goto done;
+    }
+
+    svc_res = resource_rec->resource.native.value.entity.service_resource;
+
+    if (NULL != attached->svc_req)
+    {
+        // if (DDS_RETCODE_OK !=
+        //     NDDSA_Agent_cancel_external_service_requestEA(
+        //         self, src, session_rec, resource_rec, attached))
+        // {
+        //     /* TODO log */
+        //     goto done;
+        // }
+        /* TODO log */
+        goto done;
+    }
+
+
+    if (DDS_RETCODE_OK !=
+        D2S2_ExternalServicePlugin_make_request(
+            svc_res->service->plugin,
+            svc_res->data,
+            svc_flags,
+            svc_query,
+            svc_data,
+            svc_metadata,
+            no_reply,
+            &req_token,
+            &req_complete))
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    if (no_reply)
+    {
+        retcode = DDS_RETCODE_OK;
+        goto done;
+    }
+
+    req = (NDDSA_ExternalServiceRequest*)
+        REDAFastBufferPool_getBuffer(self->pool_service_requests);
+    if (NULL == req)
+    {
+        /* TODO log */
+        goto done;
+    }
+    *req = def_req;
+    req->token = req_token;
+    req->session = &session_rec->session.base;
+    req->attached = attached->base.id;
+    req->listener.onEvent = NDDSA_Agent_on_external_service_reply_available;
+    req->listener_storage.field[0] = req;
+    req->listener_storage.field[1] = req;
+    req->sem_cancelled = RTIOsapiSemaphore_new(RTI_OSAPI_SEMAPHORE_KIND_BINARY, NULL);
+    if (NULL == req->sem_cancelled)
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    attached->svc_req = req;
+
+    pending_req = (NDDSA_ExternalServicePendingRequest*)
+        REDAFastBufferPool_getBuffer(self->pool_service_pending_requests);
+    if (NULL == pending_req)
+    {
+        /* TODO log */
+        goto done;
+    }
+    *pending_req = def_pending_req;
+
+    pending_req->request = req;
+    REDAInlineList_addNodeToBackEA(&svc_res->requests, &pending_req->node);
+
+    if (req_complete)
+    {
+        /* Fire an event to take the reply and dismiss the request */
+        const struct RTINtpTime ts_zero = RTI_NTP_TIME_ZERO;
+        if (!NDDSA_Agent_post_event(
+                self,
+                &req->listener,
+                &req->listener_storage,
+                sizeof(NDDSA_ExternalServiceRequest*),
+                &ts_zero))
+        {
+            /* TODO log */
+            goto done;
+        }
+    }
+
+    retcode = DDS_RETCODE_OK;
+
+done:
+    if (resource_rec != NULL)
+    {
+        if (!NDDSA_AgentDb_release_resource(&self->db, resource_rec))
+        {
+            D2S2Log_exception(
+                method_name,
+                &RTI_LOG_ANY_FAILURE_s,
+                D2S2_LOG_MSG_DB_RELEASE_RESOURCE_FAILED);
+            retcode = DDS_RETCODE_ERROR;
+        }
+    }
+    if (DDS_RETCODE_OK != retcode)
+    {
+        if (NULL != req)
+        {
+            REDAFastBufferPool_returnBuffer(self->pool_service_requests, req);
+        }
+        if (NULL != pending_req)
+        {
+            REDAFastBufferPool_returnBuffer(
+                self->pool_service_pending_requests, pending_req);
+        }
+    }
+    return retcode;
+}
+
+RTIBool
+NDDSA_Agent_on_external_service_reply_available(
+    const struct RTIEventGeneratorListener *me,
+    struct RTINtpTime *newTime, struct RTINtpTime *newSnooze,
+    const struct RTINtpTime *now, const struct RTINtpTime *time,
+    const struct RTINtpTime *snooze,
+    const struct RTIEventGeneratorListenerStorage *listenerStorage,
+    struct REDAWorker *worker)
+{
+    D2S2Log_METHOD_NAME(NDDSA_Agent_on_external_service_reply_available)
+    NDDSA_ExternalServiceRequest *req =
+        (NDDSA_ExternalServiceRequest*) listenerStorage->field[0];
+    RTIBool disposed = (listenerStorage->field[1] == NULL);
+    struct RTIOsapiSemaphore *cancelled_sem = listenerStorage->field[2];
+    NDDSA_Agent *self = NULL;
+    D2S2_AgentServerInterface *src = NULL;
+    D2S2_ClientSessionKey session_key = D2S2_CLIENTSESSIONKEY_INITIALIZER;
+    NDDSA_ClientSessionRecord *session_rec = NULL;
+    NDDSA_AttachedResource *attached = NULL;
+    NDDSA_ExternalServiceReply *reply = NULL;
+    DDS_Boolean retained = DDS_BOOLEAN_FALSE,
+                try_again = DDS_BOOLEAN_FALSE,
+                completed = DDS_BOOLEAN_TRUE;
+    NDDSA_ClientSession *session = (NDDSA_ClientSession*)req->session;
+    NDDSA_ResourceRecord *resource_rec = NULL;
+
+    D2S2Log_fn_entry()
+
+    UNUSED_ARG(now);
+    UNUSED_ARG(time);
+    UNUSED_ARG(snooze);
+    UNUSED_ARG(worker);
+    UNUSED_ARG(newSnooze);
+    UNUSED_ARG(newTime);
+    UNUSED_ARG(me);
+
+    if (disposed)
+    {
+        RTIOsapiSemaphore_give(cancelled_sem);
+        return RTI_FALSE;
+    }
+
+    self = session->agent;
+    src = session->intf;
+    session_key = session->base.key;
+
+    AGENT_LOOKUP_SESSION_OR_DONE(
+        self, &session_key, &session_rec, /* on_unknown */);
+    
+    NDDSA_ClientSession_find_attached_resource(
+        &session_rec->session, req->attached, &attached);
+
+    if (attached == NULL ||
+        attached->base.kind != D2S2_RESOURCEKIND_SERVICE_RESOURCE)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            D2S2_LOG_MSG_AGENT_INVALID_RESOURCE_KIND,
+            "take service reply");
+        goto done;
+    }
+
+    if (!NDDSA_AgentDb_lookup_resource(
+            &self->db, &attached->base.resource, &resource_rec))
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            D2S2_LOG_MSG_DB_LOOKUP_RESOURCE_FAILED);
+        goto done;
+    }
+    if (resource_rec == NULL)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "UNKNOWN resource");
+        goto done;
+    }
+    if (resource_rec->resource.native_deleted)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "native resource ALREADY DELETED");
+        goto done;
+    }
+
+    if (DDS_RETCODE_OK !=
+        NDDSA_Agent_take_external_service_replyEA(
+            self, src, session_rec, resource_rec, attached, req->token, &reply))
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    if (NULL == reply)
+    {
+        /* Unexpected: callback was woken up without a request. */
+        goto done;
+    }
+
+    D2S2_AgentServerInterface_on_service_reply_available(
+        src,
+        &self->base,
+        &session_rec->session.base,
+        session_rec->session.user_data,
+        attached->base.id,
+        attached->user_data,
+        reply->reply->status,
+        reply->reply->data_len,
+        reply->reply->metadata_len,
+        &reply->base,
+        &retained,
+        &try_again);
+
+    completed = (!retained && !try_again);
+
+done:
+    if (NULL != reply)
+    {
+        if (completed)
+        {
+          /* TODO allow a request to be open ended like a read(). At the
+             moment it is cancelled after the first reply */
+          if (DDS_RETCODE_OK !=
+              NDDSA_Agent_cancel_external_service_requestEA(
+                  self, src, session_rec, resource_rec, attached))
+          {
+              /* TODO log */
+              goto done;
+          }
+        } else if (try_again)
+        {
+            /* delay by 500us */
+            struct RTINtpTime min_delay = RTI_NTP_TIME_ZERO;
+            RTINtpTime_packFromMicrosec(min_delay, 0, 500);
+            if (!NDDSA_Agent_post_event(
+                    self,
+                    &req->listener,
+                    &req->listener_storage,
+                    sizeof(NDDSA_ExternalServiceRequest*),
+                    &min_delay))
+            {
+                /* TODO log */
+            }
+            // RTINtpTime_packFromMicrosec(*snooze, 0, 500);
+            // return RTI_TRUE;
+        } else if (retained)
+        {
+            REDAInlineList_addNodeToBackEA(&req->replies, &reply->node);
+        }
+    }
+    if (resource_rec != NULL)
+    {
+        if (!NDDSA_AgentDb_release_resource(&self->db, resource_rec))
+        {
+            D2S2Log_exception(
+                method_name,
+                &RTI_LOG_ANY_FAILURE_s,
+                D2S2_LOG_MSG_DB_RELEASE_RESOURCE_FAILED);
+        }
+    }
+    if (session_rec != NULL)
+    {
+        if (!NDDSA_AgentDb_release_session(&self->db, session_rec))
+        {
+            /* TODO log */
+        }
+    }
+
+    D2S2Log_fn_exit()
+    return RTI_FALSE;
+}
 
 #endif /* DDS_AGENT_DDSAPI == DDS_AGENT_DDSAPI_CONNEXT */

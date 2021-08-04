@@ -86,17 +86,6 @@ NANO_XRCE_Agent_as_interface(NANO_XRCE_Agent *const self)
     return &self->base;
 }
 
-NANO_PRIVATE
-NANO_RetCode
-NANO_XRCE_Agent_allocate_reply_message(
-    NANO_XRCE_Agent *const self,
-    NANO_XRCE_ProxyClient *const client,
-    NANO_XRCE_Stream *reply_stream,
-    const NANO_XRCE_StreamId reply_stream_id,
-    const NANO_usize payload_size,
-    const NANO_u8 *const user_payload,
-    NANO_MessageBuffer **const payload_out,
-    NANO_XRCE_Stream **const reply_stream_out);
 
 NANO_PRIVATE
 NANO_RetCode
@@ -421,6 +410,15 @@ NANO_XRCE_Agent_initialize(
     if (self->reads_pool == NULL)
     {
         NANO_LOG_ERROR_MSG("FAILED to allocate reads pool")
+        goto done;
+    }
+
+    self->service_requests_pool = 
+        REDAFastBufferPool_newForStructure(
+            NANO_XRCE_ServiceRequestState, &pool_props);
+    if (self->service_requests_pool == NULL)
+    {
+        NANO_LOG_ERROR_MSG("FAILED to allocate service requests pool")
         goto done;
     }
 
@@ -811,7 +809,8 @@ NANO_XRCE_Agent_dispose_client_session(
 
     /* Dismiss all forward requests associated with the client */
     NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
-        self, client, NULL, D2S2_ATTACHEDRESOURCEID_INVALID);
+        self, client, NULL, D2S2_ATTACHEDRESOURCEID_INVALID,
+        NANO_BOOL_TRUE /* confirmed */);
 
     rc = NANO_RETCODE_OK;
     
@@ -870,8 +869,6 @@ NANO_XRCE_Agent_delete_client_session(
     return rc;
 }
 
-
-NANO_PRIVATE
 void
 NANO_XRCE_Agent_release_reply_message(
     NANO_XRCE_Agent *const self,
@@ -899,7 +896,6 @@ NANO_XRCE_Agent_release_reply_message(
     return;
 }
 
-NANO_PRIVATE
 NANO_RetCode
 NANO_XRCE_Agent_allocate_reply_message(
     NANO_XRCE_Agent *const self,
@@ -1196,6 +1192,10 @@ NANO_XRCE_Agent_receive_message(
     min_msg_size = NANO_XRCE_SessionId_header_size(sid);
     if (min_msg_size > msg_len)
     {
+        NANO_LOG_ERROR("invalid message length",
+            NANO_LOG_SESSIONID("session", sid)
+            NANO_LOG_USIZE("min_msg_size", min_msg_size)
+            NANO_LOG_USIZE("msg_len", msg_len))
         goto done;
     }
 
@@ -1211,6 +1211,8 @@ NANO_XRCE_Agent_receive_message(
         
         if (invalid_client_key)
         {
+            NANO_LOG_ERROR("invalid client key",
+                NANO_LOG_KEY("key", client_key))
             goto done;
         }
     }
@@ -1225,6 +1227,7 @@ NANO_XRCE_Agent_receive_message(
         
         if (mapping == NULL && !self->props.auto_client_mapping)
         {
+            NANO_LOG_ERROR_MSG("no client mapping found")
             goto done;
         }
         else if (mapping != NULL)
@@ -1303,6 +1306,7 @@ NANO_XRCE_Agent_receive_message(
                     &session_key,
                     msg))
         {
+            NANO_LOG_ERROR_MSG("D2S2_Agent_receive_message FAILED")
             goto done;
         }
     }
@@ -2077,7 +2081,7 @@ NANO_XRCE_Agent_delete_entity(
            by this reader on some reliable stream and haven't been
            ACK'd yet. */
         NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
-            self, request->client, NULL, att_resource_id);
+            self, request->client, NULL, att_resource_id, NANO_BOOL_FALSE /* confirmed */);
     }
 
     if (DDS_RETCODE_OK !=
@@ -2516,9 +2520,7 @@ NANO_XRCE_Agent_on_submsg_write(
     }
     }
     
-    // NANO_LOG_INFO("RETURN write",
-    //     NANO_LOG_PTR("req", request)
-    //     NANO_LOG_MSGHDR("msg_hdr", request->msg_hdr))
+    /* TODO what happens if the write has not completed yet? */
     NANO_XRCE_Agent_return_client_request(self, request);
 
     rc = NANO_RETCODE_OK;
@@ -2883,7 +2885,7 @@ NANO_XRCE_Agent_on_submsg_read(
     {
         /* Dismiss existing forward requests & empty stream send queue */
         NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
-            self, client, stream, ares_id);
+            self, client, stream, ares_id, NANO_BOOL_FALSE /* confirmed */);
     }
 
     if (submsg->read_spec.has_delivery_ctrl)
@@ -2998,31 +3000,180 @@ NANO_XRCE_Agent_on_submsg_getinfo(
     return rc;
 }
 
+NANO_RetCode
+NANO_XRCE_Agent_on_submsg_servicereq(
+    NANO_XRCE_Agent *const self,
+    NANO_XRCE_ProxyClientRequest *const request,
+    NANO_XRCE_ServiceRequestPayload *const submsg)
+{
+    NANO_RetCode rc = NANO_RETCODE_ERROR;
+    NANO_XRCE_ObjectKind req_kind = NANO_XRCE_OBJK_INVALID;
+    D2S2_AttachedResourceId ares_id = 0;
+    D2S2_ClientSessionKey session_key = D2S2_CLIENTSESSIONKEY_INITIALIZER;
+    void *resource_data = NULL;
+    NANO_XRCE_ExternalServiceResourceState *svc_res_state = NULL;
+    DDS_Boolean resource_exists = DDS_BOOLEAN_FALSE;
+    NANO_XRCE_ProxyClient *const client = request->client;
+    D2S2_Buffer svc_query = D2S2_BUFFER_INITIALIZER;
+    D2S2_Buffer svc_data = D2S2_BUFFER_INITIALIZER;
+    D2S2_Buffer svc_metadata = D2S2_BUFFER_INITIALIZER;
+    const NANO_u8 *payload_ptr = NULL;
+
+    NANO_LOG_FN_ENTRY
+    UNUSED_ARG(self);
+    NANO_PCOND(self != NULL)
+
+    req_kind = NANO_XRCE_ObjectId_kind(&submsg->base.object_id);
+  
+    if (req_kind != NANO_XRCE_OBJK_SERVICE_RESOURCE)
+    {
+        NANO_LOG_ERROR("SERVICE_REQUEST target not an SERVICE_RESOURCE",
+            NANO_LOG_REQID("req_id",submsg->base.request_id)
+            NANO_LOG_OBJID("object",submsg->base.object_id))
+        goto done;
+    }
+    if (!submsg->has_payload &&
+        (submsg->query_len > 0 || submsg->data_len > 0 || submsg->metadata_len > 0))
+    {
+        NANO_LOG_WARNING("inconsistent SERVICE_REQUEST",
+            NANO_LOG_BOOL("has_payload", submsg->has_payload)
+            NANO_LOG_U32("query_len", submsg->query_len)
+            NANO_LOG_U32("data_len", submsg->data_len)
+            NANO_LOG_U32("metadata_len", submsg->metadata_len))
+        goto done;
+    }
+
+    ares_id = NANO_XRCE_ObjectId_to_u16(&submsg->base.object_id);
+
+    session_key.client =
+        NANO_XRCE_ClientKey_to_u32(NANO_XRCE_Session_key(&client->session));
+    session_key.id = *NANO_XRCE_Session_id(&client->session);
+    
+    if (DDS_RETCODE_OK != 
+            D2S2_Agent_lookup_resource(
+                self->base.agent,
+                &self->base,
+                client->dds_session,
+                ares_id,
+                &resource_exists,
+                &resource_data))
+    {
+        NANO_LOG_ERROR_MSG("FAILED to lookup SERVICE_RESOURCE resource")
+        goto done;
+    }
+    if (!resource_exists || resource_data == NULL)
+    {
+        NANO_LOG_ERROR("FAILED to lookup SERVICE_RESOURCE resource",
+            NANO_LOG_KEY("session.key",*NANO_XRCE_Session_key(&client->session))
+            NANO_LOG_SESSIONID("session.id",*NANO_XRCE_Session_id(&client->session))
+            NANO_LOG_OBJID("resource_id",submsg->base.object_id)
+            NANO_LOG_H32("dds.session.client", session_key.client)
+            NANO_LOG_H32("dds.session.id", session_key.id)
+            NANO_LOG_H32("dds.resource_id", ares_id)
+            NANO_LOG_BOOL("resource.exists", resource_exists)
+            NANO_LOG_PTR("resource.data", resource_data))
+        goto done;
+    }
+
+    svc_res_state = (NANO_XRCE_ExternalServiceResourceState*)resource_data;
+    if (NULL != svc_res_state->req)
+    {
+        /* Dismiss existing forward requests & empty stream send queue */
+        NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
+            self, client, NULL, ares_id, NANO_BOOL_TRUE /* confirmed */);
+        svc_res_state->req = NULL;
+    }
+    svc_res_state->forward = NANO_BOOL_TRUE;
+
+    if (submsg->has_payload)
+    {
+        payload_ptr = NANO_XRCE_BinData_contiguous_buffer(&submsg->payload);
+    }
+
+    if (submsg->query_len > 0)
+    {
+        svc_query.data = (NANO_u8*)payload_ptr;
+        svc_query.data_len = submsg->query_len;
+        payload_ptr += svc_query.data_len;
+    }
+
+    if (submsg->data_len > 0)
+    {
+        svc_data.data = (NANO_u8*)payload_ptr;
+        svc_data.data_len = submsg->data_len;
+        payload_ptr += svc_data.data_len;
+    }
+
+    if (submsg->metadata_len > 0)
+    {
+        svc_metadata.data = (NANO_u8*)payload_ptr;
+        svc_metadata.data_len = submsg->metadata_len;
+        payload_ptr += svc_metadata.data_len;
+    }
+
+    if (DDS_RETCODE_OK !=
+            D2S2_Agent_make_external_service_request(
+                self->base.agent,
+                &self->base,
+                client->dds_session,
+                ares_id,
+                submsg->flags,
+                &svc_query,
+                &svc_data,
+                &svc_metadata,
+                NANO_XRCE_SubmessageFlags_SERVICEREQUEST_oneway(request->submsg_hdr.flags),
+                request))
+    {
+        NANO_LOG_ERROR("FAILED to perform external service request",
+            NANO_LOG_KEY("session.key",*NANO_XRCE_Session_key(&client->session))
+            NANO_LOG_SESSIONID("session.id",*NANO_XRCE_Session_id(&client->session))
+            NANO_LOG_OBJID("resource_id",submsg->base.object_id)
+            NANO_LOG_H32("dds.session.client", session_key.client)
+            NANO_LOG_H32("dds.session.id", session_key.id)
+            NANO_LOG_H32("dds.resource_id", ares_id))
+        goto done;
+    }
+
+    rc = NANO_RETCODE_OK;
+
+done:
+    NANO_LOG_FN_EXIT_RC(rc)
+    return rc;
+}
+
+NANO_PRIVATE
 void
-NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
+NANO_XRCE_Agent_dismiss_client_fwd_data_requests_list(
     NANO_XRCE_Agent *const self,
     NANO_XRCE_ProxyClient *const client,
     NANO_XRCE_Stream *const req_stream,
-    const D2S2_AttachedResourceId reader_id)
+    const D2S2_AttachedResourceId reader_id,
+    const DDS_Boolean confirmed,
+    struct REDAInlineList *const list)
 {
     struct REDAInlineListNode *node = NULL;
     NANO_XRCE_ForwardDataRequest *fwd_req = NULL;
     NANO_XRCE_Stream *stream = NULL;
+    const NANO_bool any_request = reader_id != D2S2_ATTACHEDRESOURCEID_INVALID;
 
     NANO_LOG_FN_ENTRY
     
     NANO_PCOND(self != NULL)
 
-    node = REDAInlineList_getFirst(&client->forwards);
+    node = REDAInlineList_getFirst(list);
     while (node != NULL)
     {
         fwd_req = (NANO_XRCE_ForwardDataRequest*)node;
         
         if ((req_stream != NULL &&
                 NANO_XRCE_Stream_id(req_stream) != fwd_req->stream_id) ||
-            (reader_id != D2S2_ATTACHEDRESOURCEID_INVALID &&
-                fwd_req->rcvd_data->reader_id != reader_id))
+            (!any_request && fwd_req->rcvd_data->reader_id != reader_id))
         {
+            NANO_LOG_DEBUG("NOT dismissed FORWARD REQUEST",
+                NANO_LOG_KEY("session.key", *NANO_XRCE_Session_key(&client->session))
+                NANO_LOG_SESSIONID("session.id", *NANO_XRCE_Session_id(&client->session))
+                NANO_LOG_STREAMID("stream_id", fwd_req->stream_id)
+                NANO_LOG_SN("sn", fwd_req->sn))
             node = REDAInlineListNode_getNext(node);
             continue;
         }
@@ -3049,7 +3200,8 @@ NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
         if (0 == NANO_XRCE_Session_dismiss_send_queue_up_to(
                     &client->session,
                     (NANO_XRCE_ReliableStream*)stream,
-                    &fwd_req->sn))
+                    &fwd_req->sn,
+                    confirmed))
         {
             NANO_LOG_ERROR("FAILED to dismiss message from send queue",
                 NANO_LOG_KEY("session.key", *NANO_XRCE_Session_key(&client->session))
@@ -3059,10 +3211,36 @@ NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
             goto done;
         }
         
-        node = REDAInlineList_getFirst(&client->forwards);
+        node = REDAInlineList_getFirst(list);
     }
 
 done:
+    NANO_LOG_FN_EXIT
+    return;
+}
+
+
+void
+NANO_XRCE_Agent_dismiss_client_fwd_data_requests(
+    NANO_XRCE_Agent *const self,
+    NANO_XRCE_ProxyClient *const client,
+    NANO_XRCE_Stream *const req_stream,
+    const D2S2_AttachedResourceId reader_id,
+    const DDS_Boolean confirmed)
+{
+    struct REDAInlineListNode *node = NULL;
+    NANO_XRCE_ForwardDataRequest *fwd_req = NULL;
+    NANO_XRCE_Stream *stream = NULL;
+
+    NANO_LOG_FN_ENTRY
+    
+    NANO_PCOND(self != NULL)
+
+    NANO_XRCE_Agent_dismiss_client_fwd_data_requests_list(
+        self, client, req_stream, reader_id, confirmed, &client->forwards);
+    NANO_XRCE_Agent_dismiss_client_fwd_data_requests_list(
+        self, client, req_stream, reader_id, confirmed, &client->forward_replies);
+
     NANO_LOG_FN_EXIT
     return;
 }

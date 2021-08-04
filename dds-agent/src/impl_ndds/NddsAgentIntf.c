@@ -125,6 +125,11 @@ NDDSA_Agent_register_interface(
     D2S2_Agent *const self,
     D2S2_AgentServerInterface *const intf);
 
+RTI_PRIVATE
+DDS_ReturnCode_t
+NDDSA_Agent_register_external_service_plugin(
+    D2S2_Agent *const self,
+    D2S2_ExternalServicePlugin *const service_plugin);
 
 RTI_PRIVATE
 void
@@ -160,6 +165,35 @@ DDS_ReturnCode_t
 NDDSA_Agent_delete_session_event(
     D2S2_Agent *const self,
     D2S2_ClientSessionEvent *const event);
+
+RTI_PRIVATE
+DDS_ReturnCode_t
+NDDSA_Agent_make_external_service_request(
+    D2S2_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    D2S2_ClientSession *const session,
+    const D2S2_AttachedResourceId svc_res_id,
+    const DDS_UnsignedLong svc_flags,
+    const D2S2_Buffer * const svc_query,
+    const D2S2_Buffer * const svc_data,
+    const D2S2_Buffer * const svc_metadata,
+    const DDS_Boolean no_reply,
+    void *const request_param);
+
+RTI_PRIVATE
+DDS_ReturnCode_t
+NDDSA_Agent_return_external_service_reply(
+    D2S2_Agent *const self,
+    D2S2_AgentServerInterface *const src,
+    D2S2_ClientSession *const session,
+    D2S2_ReceivedData *const data);
+
+RTI_PRIVATE
+DDS_ReturnCode_t
+NDDSA_Agent_external_service_reply_available(
+    D2S2_Agent *const self,
+    const D2S2_ResourceId *const svc_res_id,
+    const D2S2_ExternalServiceRequestToken req_token);
 
 /******************************************************************************
  *                  Agent Interface Implementation
@@ -221,6 +255,22 @@ done:
     return retcode;
 }
 
+RTI_PRIVATE
+DDS_ReturnCode_t
+NDDSA_Agent_register_external_service_plugin(
+    D2S2_Agent *const agent,
+    D2S2_ExternalServicePlugin *const service_plugin)
+{
+    DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
+    NDDSA_Agent *const self = (NDDSA_Agent*)agent;
+    
+    REDAInlineList_addNodeToBackEA(&self->service_plugins, &service_plugin->node);
+    
+    retcode = DDS_RETCODE_OK;
+    
+done:
+    return retcode;
+}
 
 RTI_PRIVATE
 DDS_ReturnCode_t
@@ -341,6 +391,7 @@ NDDSA_Agent_open_session(
             &session_rec->session;
         session_rec->session.timeout_listener_storage.field[1] = 
             &session_rec->session;
+        /* TODO check that these semaphores are actually cleaned up */
         session_rec->session.sem_timeout =
             RTIOsapiSemaphore_new(RTI_OSAPI_SEMAPHORE_KIND_BINARY, NULL);
         if (session_rec->session.sem_timeout == NULL)
@@ -992,6 +1043,10 @@ NDDSA_Agent_return_loan(
     NDDSA_AttachedResource *attached = NULL;
     NDDSA_ReceivedData *rcvd_data = (NDDSA_ReceivedData*)data,
                        *cached_data = NULL;
+    /* This function assumes to be called within the context of a
+        D2S2_Agent_receive_message() call, where the session record
+        has already been locked, so it is safe to just dereference
+        the provided session, rather than looking it up again */
     NDDSA_ClientSessionRecord *session_rec =
         NDDSA_ClientSessionRecord_from_session(session);
     NDDSA_ResourceRecord *resource_rec = NULL;
@@ -1418,7 +1473,7 @@ NDDSA_Agent_receive_message(
         session_rec->session.user_data,
         message,
         &dispose);
-
+    
     if (dispose)
     {
         if (!NDDSA_AgentDb_release_session(&self->db, session_rec))
@@ -1438,7 +1493,6 @@ NDDSA_Agent_receive_message(
     retcode = DDS_RETCODE_OK;
     
 done:
-
     if (session_rec != NULL)
     {
         if (!NDDSA_AgentDb_release_session(&self->db, session_rec))
@@ -1463,7 +1517,7 @@ RTI_PRIVATE
 DDS_ReturnCode_t
 NDDSA_Agent_start(D2S2_Agent *const agent)
 {
-    D2S2Log_METHOD_NAME(NDDSA_Agent_stop)
+    D2S2Log_METHOD_NAME(NDDSA_Agent_start)
     DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
     NDDSA_Agent *const self = (NDDSA_Agent*)agent;
     D2S2_AgentServerInterface *intf = NULL;
@@ -1676,6 +1730,7 @@ NDDSA_Agent_generate_attached_resource_id(
                obj_kind = 0,
                obj_id[2] = { 0 };
     DDS_UnsignedShort id = 0;
+    RTIBool extended = RTI_FALSE;
 
     D2S2Log_fn_entry()
 
@@ -1711,6 +1766,18 @@ NDDSA_Agent_generate_attached_resource_id(
     case D2S2_RESOURCEKIND_DATAREADER:
     {
         obj_kind = 0x06;
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        obj_kind = 0x1F;
+        extended = RTI_TRUE;
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        obj_kind = 0x2F;
+        extended = RTI_TRUE;
         break;
     }
     default:
@@ -1792,6 +1859,28 @@ NDDSA_Agent_generate_attached_resource_id(
         }
         break;
     }
+    case D2S2_RESOURCEKIND_SERVICE:
+    {
+        if (!D2S2_EntityName_component(
+            &res_name,
+            D2S2_ENTITYNAME_DEPTH_SERVICE,
+            &resource_ref_static))
+        {
+            goto done;
+        }
+        break;
+    }
+    case D2S2_RESOURCEKIND_SERVICE_RESOURCE:
+    {
+        if (!D2S2_EntityName_component(
+            &res_name,
+            D2S2_ENTITYNAME_DEPTH_SERVICE_RESOURCE,
+            &resource_ref_static))
+        {
+            goto done;
+        }
+        break;
+    }
     default:
         goto done;
     }
@@ -1805,7 +1894,14 @@ NDDSA_Agent_generate_attached_resource_id(
     RTICdrMD5_finish(&hash, digest);
 
     obj_id[0] = digest[0];
-    obj_id[1] = (digest[1] & 0xf0) + obj_kind;
+    if (!extended)
+    {
+        obj_id[1] = (digest[1] & 0xf0) + obj_kind;
+    }
+    else
+    {
+        obj_id[1] = obj_kind;
+    }
 
     if (RTIOsapiUtility_isNativeLittleEndian())
     {
@@ -1833,7 +1929,292 @@ done:
     return retcode;
 }
 
+/******************************************************************************
+ * External Service functions
+ ******************************************************************************/
+DDS_ReturnCode_t
+NDDSA_Agent_make_external_service_request(
+    D2S2_Agent *const agent,
+    D2S2_AgentServerInterface *const src,
+    D2S2_ClientSession *const session,
+    const D2S2_AttachedResourceId svc_res_id,
+    const DDS_UnsignedLong svc_flags,
+    const D2S2_Buffer * const svc_query,
+    const D2S2_Buffer * const svc_data,
+    const D2S2_Buffer * const svc_metadata,
+    const DDS_Boolean no_reply,
+    void *const request_param)
+{
+    D2S2Log_METHOD_NAME(NDDSA_Agent_make_external_service_request)
+    DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
+    NDDSA_Agent *self = (NDDSA_Agent*)agent;
+    NDDSA_ClientSessionRecord *session_rec =
+            NDDSA_ClientSessionRecord_from_session(session);;
+    NDDSA_AttachedResource *attached = NULL;
 
+    NDDSA_ClientSession_find_attached_resource(
+        &session_rec->session, svc_res_id, &attached);
+
+    if (attached == NULL ||
+        attached->base.kind != D2S2_RESOURCEKIND_SERVICE_RESOURCE)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            D2S2_LOG_MSG_AGENT_INVALID_RESOURCE_KIND,
+            "make service request");
+        goto done;
+    }
+
+    if (DDS_RETCODE_OK !=
+            NDDSA_Agent_make_external_service_requestEA(
+                self,
+                src,
+                session_rec,
+                attached,
+                svc_flags,
+                svc_query,
+                svc_data,
+                svc_metadata,
+                no_reply))
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "FAILED to make service request");
+        goto done;
+    }
+    
+    D2S2_AgentServerInterface_on_service_request_submitted(
+        src,
+        &self->base,
+        &session_rec->session.base,
+        session_rec->session.user_data,
+        svc_res_id,
+        attached->user_data,
+        svc_flags,
+        svc_query,
+        svc_data,
+        svc_metadata,
+        request_param);
+
+    retcode = DDS_RETCODE_OK;
+    
+done:
+    D2S2Log_fn_exit()
+    return retcode;
+}
+
+RTI_PRIVATE
+DDS_ReturnCode_t
+NDDSA_Agent_external_service_reply_available(
+    D2S2_Agent *const agent,
+    const D2S2_ResourceId *const svc_res_id,
+    const D2S2_ExternalServiceRequestToken req_token)
+{
+    D2S2Log_METHOD_NAME(NDDSA_Agent_external_service_reply_available)
+    DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
+    NDDSA_Agent *const self = (NDDSA_Agent*)agent;
+    NDDSA_ClientSessionRecord *session_rec = NULL;
+    NDDSA_AttachedResource *attached = NULL;
+    NDDSA_ResourceRecord *resource_rec = NULL;
+    const struct RTINtpTime ts_zero = RTI_NTP_TIME_ZERO;
+    NDDSA_ExternalServicePendingRequest *pending_req = NULL;
+    NDDSA_ExternalServiceResource *svc_res = NULL;
+    
+    D2S2Log_fn_entry();
+
+    if (!NDDSA_AgentDb_lookup_resource(&self->db, svc_res_id, &resource_rec))
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            D2S2_LOG_MSG_DB_LOOKUP_RESOURCE_FAILED);
+        goto done;
+    }
+    if (resource_rec == NULL)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "UNKNOWN resource");
+        goto done;
+    }
+    if (resource_rec->resource.native_deleted)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "native resource ALREADY DELETED");
+        goto done;
+    }
+    
+    svc_res = resource_rec->resource.native.value.entity.service_resource;
+
+    pending_req = (NDDSA_ExternalServicePendingRequest*)
+        REDAInlineList_getFirst(&svc_res->requests);
+    while (NULL != pending_req)
+    {
+        if (pending_req->request->token == req_token)
+        {
+            break;
+        }
+        pending_req = (NDDSA_ExternalServicePendingRequest*)
+            REDAInlineListNode_getNext(&pending_req->node);
+    }
+
+    if (NULL == pending_req)
+    {
+        /* unknown request */
+        /* TODO log */
+        goto done;
+    }
+    
+    if (!NDDSA_Agent_post_event(
+            self,
+            &pending_req->request->listener,
+            &pending_req->request->listener_storage,
+            sizeof(NDDSA_ExternalServiceRequest*),
+            &ts_zero))
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    retcode = DDS_RETCODE_OK;
+
+done:
+
+    return retcode;
+}
+
+RTI_PRIVATE
+DDS_ReturnCode_t
+NDDSA_Agent_return_external_service_reply(
+    D2S2_Agent *const agent,
+    D2S2_AgentServerInterface *const src,
+    D2S2_ClientSession *const session,
+    D2S2_ReceivedData *const data)
+{
+    D2S2Log_METHOD_NAME(NDDSA_Agent_return_external_service_reply)
+    DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
+    NDDSA_Agent *self = (NDDSA_Agent*)agent;
+    NDDSA_AttachedResource *attached = NULL;
+    NDDSA_ExternalServiceReply *reply =
+        (NDDSA_ExternalServiceReply*)data;
+    /* This function assumes to be called within the context of a
+        D2S2_Agent_receive_message() call, where the session record
+        has already been locked, so it is safe to just dereference
+        the provided session, rather than looking it up again */
+    NDDSA_ClientSessionRecord *session_rec =
+        NDDSA_ClientSessionRecord_from_session(session);
+    NDDSA_ResourceRecord *resource_rec = NULL;
+
+    D2S2Log_fn_entry();
+
+    if (&session_rec->session != reply->session)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_s,
+            "reply does NOT belong to this session");
+        goto done;
+    }
+
+    if (session_rec->session.intf != src)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_s,
+            "session does NOT belong to this interface");
+        goto done;
+    }
+
+    NDDSA_ClientSession_find_attached_resource(
+        &session_rec->session, reply->base.reader_id, &attached);
+    
+    if (attached == NULL)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_s,
+            "UNKNOWN resource for session");
+        goto done;
+    }
+
+    if (attached->base.kind != D2S2_RESOURCEKIND_SERVICE_RESOURCE)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_ss,
+            D2S2_LOG_MSG_AGENT_INVALID_RESOURCE_KIND,
+            "service resource");
+        goto done;
+    }
+
+    if (attached->svc_req == NULL)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_s,
+            "no active request on service resource");
+        goto done;
+    }
+
+    if (!NDDSA_AgentDb_lookup_resource(
+            &self->db, &attached->base.resource, &resource_rec))
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            D2S2_LOG_MSG_DB_LOOKUP_RESOURCE_FAILED);
+        goto done;
+    }
+    if (resource_rec == NULL)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "UNKNOWN resource");
+        goto done;
+    }
+    if (resource_rec->resource.native_deleted)
+    {
+        D2S2Log_exception(
+            method_name,
+            &RTI_LOG_ANY_FAILURE_s,
+            "native resource ALREADY DELETED");
+        goto done;
+    }
+
+    /* TODO allow a request to be open ended like a read(). At the
+        moment it is cancelled after the first reply */
+    if (DDS_RETCODE_OK !=
+        NDDSA_Agent_cancel_external_service_requestEA(
+            self, src, session_rec, resource_rec, attached))
+    {
+        /* TODO log */
+        goto done;
+    }
+
+    retcode = DDS_RETCODE_OK;
+    
+done:
+    if (resource_rec != NULL)
+    {
+        if (!NDDSA_AgentDb_release_resource(&self->db, resource_rec))
+        {
+            D2S2Log_exception(
+                method_name,
+                &RTI_LOG_ANY_FAILURE_s,
+                D2S2_LOG_MSG_DB_RELEASE_RESOURCE_FAILED);
+            retcode = DDS_RETCODE_ERROR;
+        }
+    }
+    
+    D2S2Log_fn_exit()
+    return retcode;
+}
 
 /******************************************************************************
  * Session event functions
@@ -2038,6 +2419,7 @@ done:
 const D2S2_AgentIntf NDDSA_Agent_fv_Intf = {
     NDDSA_Agent_delete,
     NDDSA_Agent_register_interface,
+    NDDSA_Agent_register_external_service_plugin,
     NDDSA_Agent_open_session,
     NDDSA_Agent_close_session,
     NDDSA_Agent_create_resource,
@@ -2048,6 +2430,9 @@ const D2S2_AgentIntf NDDSA_Agent_fv_Intf = {
     NDDSA_Agent_return_loan,
     NDDSA_Agent_write,
     NDDSA_Agent_receive_message,
+    NDDSA_Agent_make_external_service_request,
+    NDDSA_Agent_return_external_service_reply,
+    NDDSA_Agent_external_service_reply_available,
     NDDSA_Agent_load_resources_from_xml,
     NDDSA_Agent_start,
     NDDSA_Agent_stop,

@@ -65,7 +65,6 @@ NDDSA_Read_convert_sampleEA(
     }
     else
     {
-
         rcvd_data = 
             (NDDSA_ReceivedData*)
                 REDAFastBufferPool_getBuffer(self->pool_samples);

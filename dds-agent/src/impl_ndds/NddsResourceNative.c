@@ -49,6 +49,7 @@ void
 NDDSA_GenericResource_finalize(NDDSA_GenericResource *self)
 {
     D2S2_ResourceId_finalize(&self->id);
+    /* self->data is assumed to be externally managed */
 }
 
 RTIBool

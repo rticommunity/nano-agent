@@ -152,6 +152,43 @@ typedef void
         const D2S2_DataRepresentation *const data,
         void *const request_data);
 
+typedef void
+    (*D2S2_AgentServerInterface_OnServiceRequestSubmittedCallback)(
+        D2S2_AgentServerInterface *const self,
+        D2S2_Agent *const agent,
+        D2S2_ClientSession *const session,
+        void *const session_data,
+        const D2S2_AttachedResourceId svc_resource_id,
+        void *const resource_data,
+        const D2S2_ExternalServiceRequestFlags svc_flags,
+        const D2S2_Buffer * const svc_query,
+        const D2S2_Buffer * const svc_data,
+        const D2S2_Buffer * const svc_metadata,
+        void *const request_data);
+
+typedef void
+    (*D2S2_AgentServerInterface_OnReleaseServiceRepliesCallback)(
+        D2S2_AgentServerInterface *const self,
+        D2S2_Agent *const agent,
+        D2S2_ClientSession *const session,
+        void *const session_data,
+        const D2S2_AttachedResourceId svc_resource_id,
+        void *const resource_data);
+
+typedef void
+    (*D2S2_AgentServerInterface_OnServiceReplyAvailableCallback)(
+        D2S2_AgentServerInterface *const self,
+        D2S2_Agent *const agent,
+        D2S2_ClientSession *const session,
+        void *const session_data,
+        const D2S2_AttachedResourceId svc_resource_id,
+        void *const resource_data,
+        const D2S2_ExternalServiceReplyStatus svc_reply_status,
+        const DDS_UnsignedLong data_len,
+        const DDS_UnsignedLong metadata_len,
+        const D2S2_ReceivedData *const reply,
+        DDS_Boolean * const retained_out,
+        DDS_Boolean * const try_again_out);
 
 typedef void
     (*D2S2_AgentServerInterface_OnMessageReceivedCallback)(
@@ -193,6 +230,10 @@ typedef struct D2S2_AgentServerInterfaceApiI
 
     D2S2_AgentServerInterface_OnAgentStartedCallback on_agent_started;
     D2S2_AgentServerInterface_OnAgentStoppedCallback on_agent_stopped;
+
+    D2S2_AgentServerInterface_OnServiceRequestSubmittedCallback on_service_request_submitted;
+    D2S2_AgentServerInterface_OnReleaseServiceRepliesCallback on_release_service_replies;
+    D2S2_AgentServerInterface_OnServiceReplyAvailableCallback on_service_reply_available;
 } D2S2_AgentServerInterfaceApi;
 
 struct D2S2_AgentServerInterfaceI
@@ -415,5 +456,55 @@ D2S2_AgentServerInterface_on_message_received(
 
 #define D2S2_AgentServerInterface_on_message_received(s_,a_,ss_,sd_,m_,d_)\
     (s_)->intf->on_message_received((s_),(a_),(ss_),(sd_),(m_),(d_))
+
+void
+D2S2_AgentServerInterface_on_service_request_submitted(
+    D2S2_AgentServerInterface *const self,
+    D2S2_Agent *const agent,
+    D2S2_ClientSession *const session,
+    void *const session_data,
+    const D2S2_AttachedResourceId svc_resource_id,
+    void *const resource_data,
+    const D2S2_ExternalServiceRequestFlags svc_flags,
+    const D2S2_Buffer * const svc_query,
+    const D2S2_Buffer * const svc_data,
+    const D2S2_Buffer * const svc_metadata,
+    void *const request_data);
+
+#define D2S2_AgentServerInterface_on_service_request_submitted(s_, a_, ss_, sd_, hi_, rsd_, hm_, hq_, hd_, hmd_, rd_) \
+  (s_)->intf->on_service_request_submitted(\
+      (s_), (a_), (ss_), (sd_), (hi_), (rsd_), (hm_), (hq_), (hd_), (hmd_), (rd_))
+
+
+void
+D2S2_AgentServerInterface_on_release_service_replies(
+    D2S2_AgentServerInterface *const self,
+    D2S2_Agent *const agent,
+    D2S2_ClientSession *const session,
+    void *const session_data,
+    const D2S2_AttachedResourceId svc_resource_id,
+    void *const resource_data);
+
+#define D2S2_AgentServerInterface_on_release_service_replies(s_, a_, ss_, sd_, hi_, hrd_) \
+  (s_)->intf->on_release_service_replies((s_), (a_), (ss_), (sd_), (hi_), (hrd_))
+
+void
+D2S2_AgentServerInterface_on_service_reply_available(
+    D2S2_AgentServerInterface *const self,
+    D2S2_Agent *const agent,
+    D2S2_ClientSession *const session,
+    void *const session_data,
+    const D2S2_AttachedResourceId svc_resource_id,
+    void *const resource_data,
+    const D2S2_ExternalServiceReplyStatus svc_reply_status,
+    const DDS_UnsignedLong data_len,
+    const DDS_UnsignedLong metadata_len,
+    const D2S2_ReceivedData *const reply,
+    DDS_Boolean * const retained_out,
+    DDS_Boolean * const try_again_out);
+
+#define D2S2_AgentServerInterface_on_service_reply_available(s_, a_, ss_, sd_, hi_, hrd_, hs_, dl_, mdl_, hd_, ro_, to_) \
+  (s_)->intf->on_service_reply_available(\
+      (s_), (a_), (ss_), (sd_), (hi_), (hrd_), (hs_), (dl_), (mdl_), (hd_), (ro_), (to_))
 
 #endif /* dds_agent_server_h */

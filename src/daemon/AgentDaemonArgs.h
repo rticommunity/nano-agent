@@ -81,6 +81,9 @@
 #define NANO_AGENT_ARGS_READSTART_L         "read-start"
 #define NANO_AGENT_ARGS_READSTART_S         "rs"
 
+#define NANO_AGENT_ARGS_HTTP_L              "http"
+#define NANO_AGENT_ARGS_HTTP_S              "http"
+
 #define NANO_AGENT_ARGS_HELP_L              "help"
 #define NANO_AGENT_ARGS_HELP_S              "h"
 
@@ -133,6 +136,7 @@ typedef struct NANO_AgentDaemonArgsI
     NANO_i32 acknack_period;
     NANO_i32 heartbeat_period;
     NDDSA_ReadStartPoint read_start;
+    NANO_bool http_enable;
 } NANO_AgentDaemonArgs;
 
 #define NANO_AGENTDAEMONARGS_INITIALIZER \
@@ -157,7 +161,8 @@ typedef struct NANO_AgentDaemonArgsI
     NANO_LIMIT_SERIALCLIENTTRANSPORT_AGENT_ADDRESS_DEFAULT, /* xrce_serial_address */\
     0, /* acknack_period */\
     0, /* heartbeat_period */\
-    NANO_LIMIT_READSTARTPOINT_DEFAULT /* read_start */\
+    NANO_LIMIT_READSTARTPOINT_DEFAULT, /* read_start */\
+    NANO_BOOL_FALSE /* http_enable */\
 }
 
 #endif /* AgentDaemonArgs_h */

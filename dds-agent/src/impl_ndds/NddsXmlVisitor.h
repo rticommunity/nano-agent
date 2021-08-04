@@ -36,6 +36,8 @@ typedef struct NDDSA_XmlVisitorI
     NDDSA_XmlVisitor_OnXmlObjectFn on_topic;
     NDDSA_XmlVisitor_OnXmlObjectFn on_datawriter;
     NDDSA_XmlVisitor_OnXmlObjectFn on_datareader;
+    NDDSA_XmlVisitor_OnXmlObjectFn on_service;
+    NDDSA_XmlVisitor_OnXmlObjectFn on_service_resource;
     NDDSA_XmlVisitor_OnXmlObjectFn on_error;
     void *user_data;
 } NDDSA_XmlVisitor;
@@ -48,8 +50,10 @@ typedef struct NDDSA_XmlVisitorI
     NULL, /* on_subscriber */\
     NULL, /* on_topic */\
     NULL, /* on_datawriter */\
-    NULL,  /* on_datareader */\
-    NULL,  /* on_error */\
+    NULL, /* on_datareader */\
+    NULL, /* on_service */\
+    NULL, /* on_service_resource */\
+    NULL, /* on_error */\
     NULL /* user_data */ \
 }
 
@@ -116,6 +120,24 @@ NDDSA_XmlVisitor_on_datareader(
 
 #define NDDSA_XmlVisitor_on_datareader(s_,a_,x_) \
     (s_)->on_datareader((s_)->user_data,(a_),(x_))
+
+RTIBool
+NDDSA_XmlVisitor_on_service(
+    NDDSA_XmlVisitor *const self,
+    NDDSA_Agent *const agent,
+    struct DDS_XMLObject *const xml_obj);
+
+#define NDDSA_XmlVisitor_on_service(s_,a_,x_) \
+    (s_)->on_service((s_)->user_data,(a_),(x_))
+
+RTIBool
+NDDSA_XmlVisitor_on_service_resource(
+    NDDSA_XmlVisitor *const self,
+    NDDSA_Agent *const agent,
+    struct DDS_XMLObject *const xml_obj);
+
+#define NDDSA_XmlVisitor_on_service_resource(s_,a_,x_) \
+    (s_)->on_service_resource((s_)->user_data,(a_),(x_))
 
 RTIBool
 NDDSA_XmlVisitor_on_error(
