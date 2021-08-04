@@ -220,7 +220,7 @@ make_http_request(
         goto done;
     }
 
-    if (query_len > 0 && (query == NULL || query[0] != '?'))
+    if (query_len > 0 && (query == NULL || query[0] == '\0'))
     {
         NANO_LOG_ERROR("invalid HTTP query",
             NANO_LOG_USIZE("query_len", query_len)
