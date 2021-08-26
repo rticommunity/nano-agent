@@ -130,13 +130,14 @@ NANO_PRIVATE
 DDS_ReturnCode_t
 parse_url(
     const char *const url_in,
+    const uint16_t default_port,
     char **const address_out,
     uint16_t *const port_out)
 {
     DDS_ReturnCode_t retcode = DDS_RETCODE_ERROR;
     char *address = NULL;
     size_t address_len = 0;
-    int32_t port = 80;
+    int32_t port = default_port;
     const char *colon_pos = strstr(url_in, ":");
 
     if (NULL != colon_pos)
@@ -459,6 +460,7 @@ NANO_HttpPlugin_create_service(
     if (DDS_RETCODE_OK !=
         parse_url(
             _host_from_url(svc),
+            svc->ssl? 443 : 80,
             &svc->address,
             &svc->port))
     {
@@ -879,6 +881,15 @@ NANO_HttpPlugin_new()
     D2S2_ExternalServicePlugin *result = NULL;
     struct REDAFastBufferPoolProperty pool_props =
         REDA_FAST_BUFFER_POOL_PROPERTY_DEFAULT;
+    unsigned int http_rc = 0;
+    const unsigned int http_flags = 2 /* NO_SSL */;
+
+    http_rc = mg_init_library(http_flags);
+    /* Initialize civetweb. */
+    if (http_flags != http_rc)
+    {
+        goto done;
+    }
 
     RTIOsapiHeap_allocateStructure(&plugin, NANO_HttpPlugin);
     if (NULL == plugin)
@@ -914,7 +925,7 @@ NANO_HttpPlugin_new()
     result = &plugin->base;
 
 done:
-    if (NULL == result)
+    if (NULL == result && NULL != plugin)
     {
         if (NULL != plugin->pool_services)
         {
