@@ -97,10 +97,14 @@ endif()
 # Load/build civetweb
 ################################################################################
 function(build_civetweb)
-  set(CIVETWEB_BUILD_TESTING OFF)
-  set(CIVETWEB_ENABLE_SERVER_EXECUTABLE ON)
-  set(CIVETWEB_INSTALL_EXECUTABLE ON)
-  set(CIVETWEB_C_STANDARD c99)
+  set(CIVETWEB_BUILD_TESTING OFF
+      CACHE INTERNAL "Disable building Civetweb's tests" FORCE)
+  set(CIVETWEB_ENABLE_SERVER_EXECUTABLE ON
+      CACHE INTERNAL "Enable building Civetweb's server executable" FORCE)
+  set(CIVETWEB_INSTALL_EXECUTABLE ON
+      CACHE INTERNAL "Enable installing Civetweb's server executable" FORCE)
+  set(CIVETWEB_C_STANDARD c99
+      CACHE INTERNAL "Compile Civetweb with C99 flags" FORCE)
   add_subdirectory(third-party/civetweb)
 endfunction()
 
