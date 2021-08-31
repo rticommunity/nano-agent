@@ -329,6 +329,9 @@ make_http_request(
     }
 
     NANO_LOG_TRACE("prepared HTTP body",
+        NANO_LOG_STR("req_body", req_body))
+
+    NANO_LOG_TRACE_FN("prepared HTTP body",
         NANO_LOG_BYTES("req_body", req_body, req_body_len + 1))
 
     result = req_body;
