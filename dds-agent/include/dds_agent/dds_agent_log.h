@@ -67,33 +67,7 @@ void D2S2Log_setVerbosity(const RTILogBitmap verbosity);
                 RTI_LOG_BIT_PERIODIC |\
                     RTI_LOG_BIT_ACTIVITY)
 
-#ifdef CONNEXTDDS_LEGACY_LOG
-#define D2S2Log_exception \
-    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_EXCEPTION) && \
-        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
-        RTILog_printContextAndMsg
-
-#define D2S2Log_warn \
-    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_WARN) && \
-        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
-        RTILog_printContextAndMsg
-
-#define D2S2Log_local \
-    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_LOCAL) && \
-        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
-        RTILog_printContextAndMsg
-
-#define D2S2Log_activity \
-    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_ACTIVITY) && \
-        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
-        RTILog_printContextAndMsg
-
-#define D2S2Log_periodic \
-    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_PERIODIC) && \
-        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
-        RTILog_printContextAndMsg
-
-#else
+#if DDS_AGENT_LOGAPI == DDS_AGENT_LOGAPI_CONNEXT_600
 #define D2S2Log_exception(method_, fmt_, ...) \
     if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_EXCEPTION) && \
         (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
@@ -134,18 +108,95 @@ void D2S2Log_setVerbosity(const RTILogBitmap verbosity);
             RTI_LOG_BIT_PERIODIC, method_, fmt_, __VA_ARGS__);\
     }
 
-#endif
-
-
-
-#define D2S2_LOG_MODULE_NAME            "D2S2"
-#define D2S2_LOG_SUBMODULE_NAME_DB      "DB"
-#define D2S2_LOG_SUBMODULE_NAME_AGENT   "Agent"
-
 #define D2S2Log_freeForm(mask) \
     if ((D2S2Log_g_instrumentationMask & (mask)) && \
         (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
         RTILog_debug
+
+#elif DDS_AGENT_LOGAPI == DDS_AGENT_LOGAPI_CONNEXT_610
+#define D2S2Log_exception(method_, fmt_, ...) \
+    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_EXCEPTION) && \
+        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
+    {\
+        RTILogMessage_printWithParams( \
+               RTI_LOG_PRINT_FORMAT_MASK_ALL, \
+               RTI_LOG_BIT_EXCEPTION, \
+               0, \
+               __FILE__, \
+               __LINE__, \
+               method_, fmt_, __VA_ARGS__);\
+    }
+
+#define D2S2Log_warn(method_, fmt_, ...) \
+    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_WARN) && \
+        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
+    {\
+        RTILogMessage_printWithParams( \
+               RTI_LOG_PRINT_FORMAT_MASK_ALL, \
+               RTI_LOG_BIT_WARN, \
+               0, \
+               __FILE__, \
+               __LINE__, \
+               method_, fmt_, __VA_ARGS__);\
+    }
+
+#define D2S2Log_local(method_, fmt_, ...) \
+    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_LOCAL) && \
+        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
+    {\
+        RTILogMessage_printWithParams( \
+               RTI_LOG_PRINT_FORMAT_MASK_ALL, \
+               RTI_LOG_BIT_LOCAL, \
+               0, \
+               __FILE__, \
+               __LINE__, \
+               method_, fmt_, __VA_ARGS__);\
+    }
+
+#define D2S2Log_activity(method_, fmt_, ...) \
+    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_ACTIVITY) && \
+        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
+    {\
+        RTILogMessage_printWithParams( \
+               RTI_LOG_PRINT_FORMAT_MASK_ALL, \
+               RTI_LOG_BIT_ACTIVITY, \
+               0, \
+               __FILE__, \
+               __LINE__, \
+               method_, fmt_, __VA_ARGS__);\
+    }
+
+#define D2S2Log_periodic(method_, fmt_, ...) \
+    if ((D2S2Log_g_instrumentationMask & RTI_LOG_BIT_PERIODIC) && \
+        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
+    {\
+        RTILogMessage_printWithParams( \
+               RTI_LOG_PRINT_FORMAT_MASK_ALL, \
+               RTI_LOG_BIT_PERIODIC, \
+               0, \
+               __FILE__, \
+               __LINE__, \
+               method_, fmt_, __VA_ARGS__);\
+    }
+
+#include <stdio.h>
+
+#define D2S2Log_freeForm(mask) \
+    if ((D2S2Log_g_instrumentationMask & (mask)) && \
+        (D2S2Log_g_submoduleMask & D2S2_CURRENT_SUBMODULE)) \
+        printf
+
+#else
+#define D2S2Log_exception(method_, fmt_, ...)
+#define D2S2Log_warn(method_, fmt_, ...)
+#define D2S2Log_local(method_, fmt_, ...)
+#define D2S2Log_activity(method_, fmt_, ...)
+#define D2S2Log_periodic(method_, fmt_, ...)
+#endif
+
+#define D2S2_LOG_MODULE_NAME            "D2S2"
+#define D2S2_LOG_SUBMODULE_NAME_DB      "DB"
+#define D2S2_LOG_SUBMODULE_NAME_AGENT   "Agent"
 
 /******************************************************************************
  * Log Helpers

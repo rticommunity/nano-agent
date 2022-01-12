@@ -92,6 +92,15 @@ set(DDS_AGENT_LIBS          RTIConnextDDS::c_api)
 
 set(DDS_AGENT_LIBRARY       ddsagent)
 
+set(DDS_AGENT_DEFINES)
+if("${CONNEXTDDS_VERSION}" VERSION_LESS "6.1.0")
+    list(APPEND DDS_AGENT_DEFINES
+        "DDS_AGENT_LOGAPI=DDS_AGENT_LOGAPI_CONNEXT_600")
+else()
+    list(APPEND DDS_AGENT_DEFINES
+        "DDS_AGENT_LOGAPI=DDS_AGENT_LOGAPI_CONNEXT_610")
+endif()
+
 nano_component(DDS_AGENT)
 nano_component_library(DDS_AGENT)
 nano_component_install(DDS_AGENT)

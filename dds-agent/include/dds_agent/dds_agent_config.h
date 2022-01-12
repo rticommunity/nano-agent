@@ -33,6 +33,14 @@
 #define DDS_AGENT_DDSAPI        DDS_AGENT_DDSAPI_CONNEXT
 #endif /* DDS_AGENT_DDSAPI */
 
+#define DDS_AGENT_LOGAPI_UNKNOWN            0
+#define DDS_AGENT_LOGAPI_CONNEXT_600        1
+#define DDS_AGENT_LOGAPI_CONNEXT_610        2
+
+#ifndef DDS_AGENT_LOGAPI
+#define DDS_AGENT_LOGAPI        DDS_AGENT_LOGAPI_CONNEXT_600
+#endif /* DDS_AGENT_LOGAPI */
+
 /******************************************************************************
  *                      Include DDS API headers
  ******************************************************************************/
