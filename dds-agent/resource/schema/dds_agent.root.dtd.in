@@ -1,0 +1,1 @@
+<!ELEMENT dds (qos_library|types|type_library|domain_library|participant_library|domain_participant_library|application_library)+>

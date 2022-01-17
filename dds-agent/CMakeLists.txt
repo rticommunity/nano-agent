@@ -40,6 +40,95 @@ nano_project()
 nano_project_load_connextdds()
 
 ################################################################################
+# Helper functions to generate the DTD
+################################################################################
+function(generate_dtd)
+    find_package(PythonInterp REQUIRED)
+    include(FindPackageHandleStandardArgs)
+    find_package_handle_standard_args(
+        Python
+        REQUIRED_VARS
+            PYTHON_EXECUTABLE
+            PYTHON_VERSION_STRING
+        VERSION_VAR PYTHON_VERSION_STRING
+    )
+
+    find_program(EMBEDSOURCE_SCRIPT
+        NAMES
+            embed-source.py
+        HINTS
+            "${CMAKE_CURRENT_SOURCE_DIR}/resource/python"
+        NO_DEFAULT_PATH
+    )
+    set(EMBEDSOURCE_COMMAND ${PYTHON_EXECUTABLE} ${EMBEDSOURCE_SCRIPT})
+    find_package_handle_standard_args(
+        EmbedSource
+        REQUIRED_VARS
+            EMBEDSOURCE_SCRIPT
+        FAIL_MESSAGE
+            "Could NOT find python script to generate embedded DTD."
+    )
+    mark_as_advanced(EMBEDSOURCE_SCRIPT EMBEDSOURCE_COMMAND)
+
+    file(READ
+        "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/dds_agent.root.dtd.in"
+        QOS_ROOT_TAG_DTD)
+
+    file(READ
+        "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/dds_agent.body.dtd.in"
+        QOS_ENTITY_CONFIGURATION_DTD_AGENT)
+
+    file(READ
+        "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/rtiddsconfig.dtd"
+        QOS_ENTITY_CONFIGURATION_DTD_CONNEXT)
+
+    string(CONCAT
+        QOS_ENTITY_CONFIGURATION_DTD
+        "${QOS_ENTITY_CONFIGURATION_DTD_AGENT}"
+        "${QOS_ENTITY_CONFIGURATION_DTD_CONNEXT}"
+        "\n")
+
+    file(READ
+        "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/rti_dds_topic_types.dtd"
+        QOS_EXTENSIONS_DTD)
+    
+    set(dtd_license_in
+        "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/dtd_license.in")
+    file(READ
+        "${dtd_license_in}"
+        DTD_LICENSE)
+
+    configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/rtidds.dtd.in"
+      "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/dds_agent.dtd")
+
+    add_custom_command(
+        VERBATIM
+        OUTPUT
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/impl_ndds/NddsAgentDtd.h"
+        COMMAND
+            ${EMBEDSOURCE_COMMAND}
+                --input "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/dds_agent.dtd"
+                --license "${dtd_license_in}"
+                --varname NDDSA_AGENT_DTD
+                -o "${CMAKE_CURRENT_SOURCE_DIR}/src/impl_ndds/NddsAgentDtd.h"
+        DEPENDS
+          "${EMBEDSOURCE_SCRIPT}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/dds_agent.root.dtd.in"
+          "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/dds_agent.body.dtd.in"
+          "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/rtiddsconfig.dtd"
+          "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/rti_dds_topic_types.dtd"
+          "${CMAKE_CURRENT_SOURCE_DIR}/resource/schema/rtidds.dtd.in"
+          "${dtd_license_in}"
+    )
+endfunction()
+
+option(GENERATE_DTD "Add targets to regenerate DTD from source" OFF)
+if(GENERATE_DTD)
+    generate_dtd()
+endif()
+
+################################################################################
 # "ddsagent" component
 ################################################################################
 

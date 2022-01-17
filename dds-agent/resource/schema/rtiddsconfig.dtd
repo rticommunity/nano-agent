@@ -1,0 +1,109 @@
+<!-- domain_library -->
+<!ELEMENT domain_library (domain)+>
+<!ATTLIST domain_library name CDATA #REQUIRED>
+
+<!-- domain -->
+<!ELEMENT domain (register_type| 
+				  topic| 
+				  domain_id| 
+				  participant_qos| 
+				  deserialize_mode| 
+				  type_config)*>
+<!ATTLIST domain name CDATA #REQUIRED>
+<!ATTLIST domain base_name CDATA #IMPLIED>
+<!ATTLIST domain domain_id CDATA #IMPLIED>
+
+<!-- participant_library -->
+<!ELEMENT participant_library (domain_participant)+>
+<!ATTLIST participant_library name CDATA #REQUIRED>
+
+<!-- domain_participant_library -->
+<!ELEMENT domain_participant_library (domain_participant)+>
+<!ATTLIST domain_participant_library name CDATA #REQUIRED>
+
+<!-- application -->
+<!ELEMENT application (domain_participant)+>
+<!ATTLIST application name CDATA #REQUIRED>
+
+<!-- domain_participant -->
+<!ELEMENT domain_participant (
+                        memory_management?,
+                        (register_type* | 
+                        topic*), 
+                        (publisher* | 
+                        subscriber* | 
+                        data_writer* | 
+                        data_reader* | 
+                        (participant_qos | domain_participant_qos)?))>
+<!ATTLIST domain_participant name CDATA #REQUIRED>
+<!ATTLIST domain_participant base_name CDATA #IMPLIED>
+<!ATTLIST domain_participant domain_ref CDATA #IMPLIED>
+<!ATTLIST domain_participant domain_id CDATA #IMPLIED>
+
+<!-- publisher -->
+<!ELEMENT publisher (data_writer* | publisher_qos?)>
+<!ATTLIST publisher name CDATA #REQUIRED>
+<!ATTLIST publisher multiplicity CDATA #IMPLIED>
+
+<!-- data_writer -->
+<!ELEMENT data_writer (datawriter_qos)?>
+<!ATTLIST data_writer name CDATA #REQUIRED>
+<!ATTLIST data_writer multiplicity CDATA #IMPLIED>
+<!ATTLIST data_writer topic_ref CDATA #REQUIRED>
+
+<!-- subscriber -->
+<!ELEMENT subscriber (data_reader* | subscriber_qos?)>
+<!ATTLIST subscriber name CDATA #REQUIRED>
+<!ATTLIST subscriber multiplicity CDATA #IMPLIED>
+
+<!-- data_reader -->
+<!ELEMENT data_reader (filter? | content_filter? | datareader_qos?)>
+<!ATTLIST data_reader name CDATA #REQUIRED>
+<!ATTLIST data_reader multiplicity CDATA #IMPLIED>
+<!ATTLIST data_reader topic_ref CDATA #REQUIRED>
+
+<!-- Filter -->
+<!ELEMENT filter (#PCDATA|expression|parameter_list|expression_parameters)*>
+<!ATTLIST filter name CDATA #IMPLIED>
+<!ATTLIST filter kind (builtin.sql|builtin.stringMatch) #IMPLIED>
+
+<!-- Content Filter -->
+<!ELEMENT content_filter (#PCDATA|expression|expression_parameters)*>
+<!ATTLIST content_filter name CDATA #IMPLIED>
+<!ATTLIST content_filter kind (builtin.sql|builtin.stringMatch) #IMPLIED>
+
+<!-- expression-->
+<!ELEMENT expression (#PCDATA)>
+
+<!-- parameters-->
+<!ELEMENT parameter_list (param+ | element+)>
+<!ELEMENT param (#PCDATA)>
+
+<!-- expression parameters-->
+<!ELEMENT expression_parameters (element+)>
+
+<!-- register_type -->
+<!ELEMENT register_type (registered_name)?>
+<!ATTLIST register_type name CDATA #REQUIRED>
+<!ATTLIST register_type kind (builtin.string| 
+                                builtin.keyedString| 
+                                builtin.octets| 
+                                builtin.keyedOctets| 
+                                dynamicData| 
+                                userGenerated) #IMPLIED>
+<!ATTLIST register_type type_ref CDATA #IMPLIED>
+
+<!-- Topic -->
+<!ELEMENT topic (registered_name? | topic_qos?)>
+<!ATTLIST topic name CDATA #REQUIRED>
+<!ATTLIST topic register_type_ref CDATA #REQUIRED>
+
+<!-- registered_name-->
+<!ELEMENT registered_name (#PCDATA)>
+
+<!ELEMENT memory_management (sample_buffer_min_size?|
+                             sample_buffer_trim_to_size? |
+                             pool_sample_buffer_max_size?|
+                             persistent_sample_buffer_max_size?)*>
+<!ELEMENT sample_buffer_min_size (#PCDATA)>
+<!ELEMENT sample_buffer_trim_to_size (#PCDATA)>

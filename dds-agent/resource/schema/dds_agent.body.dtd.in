@@ -1,0 +1,3 @@
+<!-- application_library -->
+<!ELEMENT application_library (application*)>
+<!ATTLIST application_library name NMTOKEN #REQUIRED>
