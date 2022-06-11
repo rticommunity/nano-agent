@@ -352,7 +352,7 @@ NANO_XRCE_Udpv4AgentTransport_initialize(
         metadata_addr =
             NANO_XRCE_TransportLocatorMedium_address_to_ipv4addr(
                 &self->metadata_address);
-        if (NANO_OSAPI_Ipv4Addr_is_multicast(metadata_addr))
+        if (NANO_OSAPI_Ipv4Addr_is_multicast(&metadata_addr))
         {
             NANO_OSAPI_Udpv4SocketProperties_set_multicast(
                 &metadata_socket_props);
