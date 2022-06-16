@@ -29,13 +29,11 @@ static void echo_server_exit_on_signal_handler()
   NANO_MessageBuffer mbuf = NANO_MESSAGEBUFFER_INITIALIZER;
   echo_server_f_active = NANO_BOOL_FALSE;
 
-  NANO_MessageBuffer_set_external_data(&mbuf,
-    (NANO_u8*) echo_server_f_exit_flag, sizeof(echo_server_f_exit_flag));
 
   if (NULL != echo_server_f_exit_socket)
   {
-    NANO_MessageBuffer_flags_set_inline(&mbuf);
-    NANO_MessageBuffer_set_data_len(&mbuf, 4);
+    NANO_MessageBuffer_set_external_data(&mbuf,
+      (NANO_u8*) echo_server_f_exit_flag, sizeof(echo_server_f_exit_flag));
     NANO_OSAPI_Udpv4Socket_send(
       echo_server_f_exit_socket,
       (NANO_u8*)&echo_server_f_exit_socket_addr,

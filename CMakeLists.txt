@@ -57,6 +57,12 @@ nano_project_option(
     ${${PROJECT_NAME}_ENABLE_CLIENT_CPP}
     "Include nano-client Arduino-compatible API in build")
 
+
+nano_project_option(
+  BUILD_UNIT_TESTS
+  "Build included unit tests"
+  OFF
+  "Build various unit tests. Requires client APIs to be built")
 ################################################################################
 
 nano_project_load_connextdds()
@@ -215,6 +221,11 @@ if (${PROJECT_NAME}_BUILD_DOCS)
 
     nano_project_docs()
 
+endif()
+
+################################################################################
+if(BUILD_UNIT_TESTS)
+  add_subdirectory(nano-tests)
 endif()
 
 ################################################################################

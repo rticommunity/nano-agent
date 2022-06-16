@@ -6,7 +6,7 @@ include(CMakeFindDependencyMacro)
 
 get_filename_component(nano-agent_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
 
-find_dependency(nano-core CONFIG REQUIRED)
+find_dependency(nano-core-agent CONFIG REQUIRED)
 
 find_dependency(dds-agent CONFIG REQUIRED)
 

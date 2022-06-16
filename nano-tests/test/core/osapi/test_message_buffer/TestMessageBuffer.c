@@ -70,6 +70,7 @@ static void test_NANO_MessageBuffer_initialize_inline(void)
   NANO_MessageBufferData mbuf_inline[NANO_MESSAGEBUFFER_INLINE_SIZE(MBUF_SIZE)] = { 0 };
   NANO_MessageBuffer * mbuf = (NANO_MessageBuffer *)&mbuf_inline;
 
+  NANO_OSAPI_Memory_zero(&mbuf_inline, sizeof(mbuf_inline));
   TEST_ASSERT_FALSE(NANO_MessageBuffer_flags_inline(mbuf));
   NANO_MessageBuffer_flags_set_inline(mbuf);
   TEST_ASSERT_TRUE(NANO_MessageBuffer_flags_inline(mbuf));
@@ -195,6 +196,7 @@ static void test_NANO_MessageBuffer_data_offset(void)
   NANO_u8 mbuf_extdata[MBUF_SIZE];
   NANO_MessageBuffer * mbuf = (NANO_MessageBuffer *)&mbuf_inline;
 
+  NANO_OSAPI_Memory_zero(mbuf_inline, sizeof(mbuf_inline));
   NANO_MessageBuffer_flags_set_inline(mbuf);
   TEST_ASSERT_TRUE(NANO_MessageBuffer_flags_inline(mbuf));
   NANO_MessageBuffer_set_data_len(mbuf, MBUF_SIZE);
@@ -210,7 +212,16 @@ static void test_NANO_MessageBuffer_data_offset(void)
       (NANO_MessageBuffer_inline_data_head_ptr(mbuf) +
         NANO_MessageBuffer_data_offset(mbuf)));
 
-  NANO_MessageBuffer_data_len_msg(mbuf, &mbuf_len);
+  // NANO_MessageBuffer_data_len_msg(mbuf, &mbuf_len);
+  {
+    const NANO_MessageBuffer *nxt_mbuf_ = mbuf;
+    *(&mbuf_len) = 0;
+    while (nxt_mbuf_ != NULL)
+    {
+        *(&mbuf_len) += NANO_MessageBuffer_data_len(nxt_mbuf_);
+        nxt_mbuf_ = NANO_MessageBuffer_next(nxt_mbuf_);
+    }
+  }
   TEST_ASSERT_EQUAL_UINT32(MBUF_SIZE, mbuf_len);
   TEST_ASSERT_EQUAL_UINT32(MBUF_SIZE, NANO_MessageBuffer_data_len(mbuf));
 

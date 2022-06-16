@@ -1,8 +1,4 @@
-# nano-test - Unit tests for nano-client and nano-agent
-
-This repository contains unit tests for
-[nano-client](https://github.com/rticommunity/nano-client) and
-[nano-agent](https://github.com/rticommunity/nano-agent).
+# nano-tests - Unit tests for nano-client and nano-agent
 
 ## Native Tests
 
@@ -12,28 +8,21 @@ This repository contains unit tests for
    source ~/rti_connext_dds.6.0.1/resource/script/rtisetenv_x64Linux4gcc7.3.0.bash
    ```
 
-2. Clone, build and install [nano-agent](https://github.com/rticommunity/nano-agent):
+2. Clone, build and install [nano-agent](https://github.com/rticommunity/nano-agent)
+   with unit tests enabled:
 
    ```sh
    git clone --recurse-submodules https://github.com/rticommunity/nano-agent
    mkdir nano-agent/build
    cmake -Bnano-agent/build -Hnano-agent \
-     -DCMAKE_INSTALL_PREFIX=nano-agent/install
+     -DCMAKE_INSTALL_PREFIX=nano-agent/install \
+     -DBUILD_UNIT_TESTS=ON
    cmake --build nano-agent/build --target install
    ```
 
-3. Build unit tests:
-
-   ```sh
-   mkdir nano-agent/nano-tests/build
-   cmake -Bnano-agent/nano-tests/build -Hnano-agent/nano-tests \
-     -DCMAKE_PREFIX_PATH=$(pwd)/nano-agent/install \
-   cmake --build nano-agent/nano-tests/build
-   ```
-
-4. Run the included tests:
+3. Run the tests with `ctest`:
 
   ```sh
-  (cd nano-agent/nano-tests/build && ctest)
+  (cd nano-agent/build/nano-tests && ctest)
   ```
 
